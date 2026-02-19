@@ -121,6 +121,90 @@ run_psql_query() {
 }
 
 
+# --- Pre-flight: PostgreSQL 설치 확인 및 경로 탐지 ---
+PSQL_BIN=""
+PG_DATA=""
+PG_CONF=""
+PG_HBA=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    PSQL_BIN=$(command -v psql 2>/dev/null)
+    local pg_config_bin
+    pg_config_bin=$(command -v pg_config 2>/dev/null)
+
+    # 2) 프로세스에서 data dir 추출
+    local pg_proc
+    pg_proc=$(ps -ef 2>/dev/null | grep '[p]ostgres.*-D' | head -1)
+    if [ -n "$pg_proc" ]; then
+        PG_DATA=$(echo "$pg_proc" | sed -n 's/.*-D[[:space:]]*\([^ ]*\).*/\1/p')
+    fi
+
+    # pg_config 으로 경로 추출
+    if [ -z "$PG_DATA" ] && [ -n "$pg_config_bin" ]; then
+        local sharedir
+        sharedir=$($pg_config_bin --sharedir 2>/dev/null)
+        if [ -n "$sharedir" ]; then
+            PG_DATA=$(dirname "$sharedir")/data
+            [ ! -d "$PG_DATA" ] && PG_DATA=""
+        fi
+    fi
+
+    # 3) 공통 경로 탐색
+    if [ -z "$PG_DATA" ]; then
+        for d in /var/lib/postgresql/*/main /var/lib/pgsql/*/data /var/lib/pgsql/data /usr/local/pgsql/data; do
+            if [ -d "$d" ]; then
+                PG_DATA="$d"
+                break
+            fi
+        done
+    fi
+
+    # 설정 파일 경로 확정
+    if [ -n "$PG_DATA" ]; then
+        [ -f "$PG_DATA/postgresql.conf" ] && PG_CONF="$PG_DATA/postgresql.conf"
+        [ -f "$PG_DATA/pg_hba.conf" ] && PG_HBA="$PG_DATA/pg_hba.conf"
+    fi
+    # Debian/Ubuntu 스타일
+    if [ -z "$PG_CONF" ]; then
+        for f in /etc/postgresql/*/main/postgresql.conf; do
+            if [ -f "$f" ]; then
+                PG_CONF="$f"
+                PG_HBA="$(dirname "$f")/pg_hba.conf"
+                break
+            fi
+        done
+    fi
+
+    # 4) 패키지 매니저 확인
+    if [ -z "$PSQL_BIN" ] && [ -z "$PG_DATA" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'postgresql' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'postgresql' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$PSQL_BIN" ] || [ -n "$PG_DATA" ] || [ -n "$PG_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+
+###############################################################################
+# Pre-flight: 애플리케이션 설치 확인 및 경로 탐지
+###############################################################################
+detect_app
+
+if [ "$APP_FOUND" = "false" ]; then
+    echo "[경고] PostgreSQL 이(가) 설치되어 있지 않거나 탐지되지 않았습니다."
+    echo "일부 점검 항목이 N/A로 처리될 수 있습니다."
+    echo ""
+fi
+
+
 # CLD-PostgreSQL-07 / D-08: 안전한 암호화 알고리즘 사용
 check_CLD_PostgreSQL_07() {
     local status="양호"

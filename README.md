@@ -312,6 +312,55 @@ sudo bash scripts/ceph_cce_check.sh result_ceph.json
 
 ---
 
+## 자동 탐지 기능 (Pre-flight Detection)
+
+각 스크립트는 실행 시 자동으로 대상 애플리케이션의 설치 여부를 확인하고 바이너리/설정 파일 경로를 탐지합니다.
+
+### 탐지 방식
+
+모든 스크립트의 `detect_app()` 함수가 아래 순서로 탐지를 수행합니다:
+
+1. **바이너리 탐지**: `command -v`로 실행 파일 존재 여부 확인
+2. **프로세스 탐지**: `ps -ef`로 실행 중인 프로세스에서 경로/설정 추출
+3. **공통 경로 탐색**: 알려진 설치 경로를 순회하며 설정 파일 탐색
+4. **패키지 매니저 확인**: `dpkg -l` / `rpm -qa`로 패키지 설치 여부 확인
+5. **설정 파일 확정**: 발견된 경로를 전역 변수에 저장
+
+### 탐지 결과
+
+| 상태 | 동작 |
+|---|---|
+| 앱 발견 | 탐지된 경로를 전역 변수에 저장하고 정상 진행 |
+| 앱 미발견 | 경고 메시지 출력 후 진단 계속 진행 (일부 항목 N/A 처리) |
+
+### 앱별 탐지 변수
+
+| 앱 | 주요 전역 변수 |
+|---|---|
+| MySQL | `MYSQL_BIN`, `MYSQLD_BIN`, `MYSQL_CONF` |
+| MSSQL | `SQLCMD_BIN`, `MSSQL_CONF` |
+| PostgreSQL | `PSQL_BIN`, `PG_DATA`, `PG_CONF`, `PG_HBA` |
+| Redis | `REDIS_CLI`, `REDIS_CONF` |
+| Elasticsearch | `ES_CONF`, `ES_URL` |
+| MongoDB | `MONGO_BIN`, `MONGOD_CONF` |
+| Apache | `APACHE_BIN`, `APACHE_CONF`, `APACHE_CONF_DIR` |
+| Nginx | `NGINX_BIN`, `NGINX_CONF` |
+| Tomcat | `CATALINA_HOME` |
+| Docker | `DOCKER_BIN`, `DOCKER_CONF` |
+| K8s Master | `KUBECTL_BIN`, `K8S_MANIFEST_DIR` |
+| K8s Worker | `KUBECTL_BIN`, `KUBELET_CONF` |
+| KVM | `VIRSH_BIN`, `LIBVIRT_CONF` |
+| Xenserver | `XE_BIN` |
+| ESXi | `ESXCLI_BIN` |
+| PHP | `PHP_BIN`, `PHP_INI` |
+| Node.js | `NODE_BIN`, `NPM_BIN` |
+| Hadoop | `HADOOP_BIN`, `HADOOP_CONF_DIR` |
+| Ceph | `CEPH_BIN`, `CEPH_CONF` |
+
+> Windows는 OS 자체를 진단하므로 별도 앱 탐지가 필요하지 않습니다.
+
+---
+
 ## 결과 JSON 구조
 
 ```json

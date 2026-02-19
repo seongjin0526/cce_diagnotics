@@ -120,6 +120,67 @@ run_redis_cli() {
 }
 
 
+# --- Pre-flight: Redis 설치 확인 및 경로 탐지 ---
+REDIS_CLI=""
+REDIS_CONF=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    REDIS_CLI=$(command -v redis-cli 2>/dev/null)
+    local redis_server_bin
+    redis_server_bin=$(command -v redis-server 2>/dev/null)
+
+    # 2) 프로세스에서 config 경로 추출
+    local redis_proc
+    redis_proc=$(ps -ef 2>/dev/null | grep '[r]edis-server' | head -1)
+    if [ -n "$redis_proc" ]; then
+        # redis-server /path/to/redis.conf 형태에서 추출
+        local conf_from_proc
+        conf_from_proc=$(echo "$redis_proc" | grep -oP '\S+redis\.conf' | head -1)
+        if [ -n "$conf_from_proc" ] && [ -f "$conf_from_proc" ]; then
+            REDIS_CONF="$conf_from_proc"
+        fi
+    fi
+
+    # 3) 공통 설정 파일 경로 탐색
+    if [ -z "$REDIS_CONF" ]; then
+        for f in /etc/redis/redis.conf /etc/redis.conf /etc/redis/6379.conf /usr/local/etc/redis.conf; do
+            if [ -f "$f" ]; then
+                REDIS_CONF="$f"
+                break
+            fi
+        done
+    fi
+
+    # 4) 패키지 매니저 확인
+    if [ -z "$REDIS_CLI" ] && [ -z "$redis_server_bin" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'redis-server' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'redis' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$REDIS_CLI" ] || [ -n "$redis_server_bin" ] || [ -n "$REDIS_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+
+###############################################################################
+# Pre-flight: 애플리케이션 설치 확인 및 경로 탐지
+###############################################################################
+detect_app
+
+if [ "$APP_FOUND" = "false" ]; then
+    echo "[경고] Redis 이(가) 설치되어 있지 않거나 탐지되지 않았습니다."
+    echo "일부 점검 항목이 N/A로 처리될 수 있습니다."
+    echo ""
+fi
+
+
 # CLD-Redis-01: Redis 인증 패스워드 설정
 check_CLD_Redis_01() {
     local status="양호"

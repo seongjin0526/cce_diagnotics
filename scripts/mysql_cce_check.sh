@@ -120,6 +120,67 @@ run_mysql_query() {
 }
 
 
+# --- Pre-flight: MySQL 설치 확인 및 경로 탐지 ---
+MYSQL_BIN=""
+MYSQLD_BIN=""
+MYSQL_CONF=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    MYSQL_BIN=$(command -v mysql 2>/dev/null)
+    MYSQLD_BIN=$(command -v mysqld 2>/dev/null)
+
+    # 2) 프로세스에서 탐지
+    if [ -z "$MYSQLD_BIN" ]; then
+        MYSQLD_BIN=$(ps -ef 2>/dev/null | grep '[m]ysqld' | awk '{for(i=1;i<=NF;i++) if($i ~ /mysqld$/) print $i}' | head -1)
+    fi
+
+    # 프로세스에서 --defaults-file 추출
+    local defaults_file
+    defaults_file=$(ps -ef 2>/dev/null | grep '[m]ysqld' | sed -n 's/.*--defaults-file=\([^ ]*\).*/\1/p' | head -1)
+    if [ -n "$defaults_file" ] && [ -f "$defaults_file" ]; then
+        MYSQL_CONF="$defaults_file"
+    fi
+
+    # 3) 공통 설정 파일 경로 탐색
+    if [ -z "$MYSQL_CONF" ]; then
+        for f in /etc/my.cnf /etc/mysql/my.cnf /etc/mysql/mysql.conf.d/mysqld.cnf ~/.my.cnf /usr/local/mysql/my.cnf; do
+            if [ -f "$f" ]; then
+                MYSQL_CONF="$f"
+                break
+            fi
+        done
+    fi
+
+    # 4) 패키지 매니저 확인
+    if [ -z "$MYSQL_BIN" ] && [ -z "$MYSQLD_BIN" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'mysql-server\|mysql-client\|mariadb-server' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'mysql-server\|mysql-community\|mariadb-server' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$MYSQL_BIN" ] || [ -n "$MYSQLD_BIN" ] || [ -n "$MYSQL_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+
+###############################################################################
+# Pre-flight: 애플리케이션 설치 확인 및 경로 탐지
+###############################################################################
+detect_app
+
+if [ "$APP_FOUND" = "false" ]; then
+    echo "[경고] MySQL 이(가) 설치되어 있지 않거나 탐지되지 않았습니다."
+    echo "일부 점검 항목이 N/A로 처리될 수 있습니다."
+    echo ""
+fi
+
+
 # CLD-MY-SQL-05 / D-07: root 권한으로 서버 구동 제한
 check_CLD_MY_SQL_05() {
     local status="양호"

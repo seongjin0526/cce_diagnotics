@@ -95,6 +95,73 @@ run_es_api() {
 }
 
 
+# --- Pre-flight: Elasticsearch 설치 확인 및 경로 탐지 ---
+ES_CONF=""
+ES_URL="${ES_URL:-http://localhost:9200}"
+APP_FOUND="false"
+
+detect_app() {
+    local es_bin
+    es_bin=$(command -v elasticsearch 2>/dev/null)
+
+    # 1) curl 로 ES 응답 확인
+    local es_response
+    es_response=$(curl -s -m 5 "$ES_URL" 2>/dev/null)
+    if echo "$es_response" | grep -q '"tagline"'; then
+        APP_FOUND="true"
+    fi
+
+    # 2) 프로세스에서 탐지
+    local es_proc
+    es_proc=$(ps -ef 2>/dev/null | grep '[e]lasticsearch' | grep -v grep | head -1)
+    if [ -n "$es_proc" ]; then
+        APP_FOUND="true"
+        # -Epath.conf 추출
+        local conf_from_proc
+        conf_from_proc=$(echo "$es_proc" | grep -oP '\-Epath\.conf=\K[^ ]+' | head -1)
+        if [ -n "$conf_from_proc" ] && [ -d "$conf_from_proc" ]; then
+            ES_CONF="$conf_from_proc/elasticsearch.yml"
+        fi
+    fi
+
+    # 3) 공통 설정 파일 경로 탐색
+    if [ -z "$ES_CONF" ]; then
+        for f in /etc/elasticsearch/elasticsearch.yml /usr/local/etc/elasticsearch/elasticsearch.yml; do
+            if [ -f "$f" ]; then
+                ES_CONF="$f"
+                break
+            fi
+        done
+    fi
+
+    # 4) 패키지 매니저 확인
+    if [ "$APP_FOUND" = "false" ] && [ -z "$es_bin" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'elasticsearch' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'elasticsearch' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$es_bin" ] || [ -n "$ES_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+
+###############################################################################
+# Pre-flight: 애플리케이션 설치 확인 및 경로 탐지
+###############################################################################
+detect_app
+
+if [ "$APP_FOUND" = "false" ]; then
+    echo "[경고] Elasticsearch 이(가) 설치되어 있지 않거나 탐지되지 않았습니다."
+    echo "일부 점검 항목이 N/A로 처리될 수 있습니다."
+    echo ""
+fi
+
+
 # CLD-Elasticsearch-01: Elasticsearch 인증 설정
 check_CLD_Elasticsearch_01() {
     local status="양호"

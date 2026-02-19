@@ -86,6 +86,66 @@ is_service_active() {
 }
 
 
+# --- Pre-flight: PHP 설치 확인 및 경로 탐지 ---
+PHP_BIN=""
+PHP_INI=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    PHP_BIN=$(command -v php 2>/dev/null)
+
+    # 2) 프로세스에서 php-fpm 탐지
+    if ps -ef 2>/dev/null | grep -q '[p]hp-fpm'; then
+        APP_FOUND="true"
+    fi
+
+    # 3) php --ini 로 설정 경로 추출
+    if [ -n "$PHP_BIN" ]; then
+        PHP_INI=$("$PHP_BIN" --ini 2>/dev/null | sed -n 's/.*Loaded Configuration File:[[:space:]]*\(.*\)/\1/p')
+        if [ -z "$PHP_INI" ] || [ "$PHP_INI" = "(none)" ]; then
+            PHP_INI=""
+        fi
+    fi
+
+    # 4) 공통 설정 파일 경로 탐색
+    if [ -z "$PHP_INI" ]; then
+        for f in /etc/php/*/cli/php.ini /etc/php/*/fpm/php.ini /etc/php.ini /usr/local/etc/php/php.ini; do
+            if [ -f "$f" ]; then
+                PHP_INI="$f"
+                break
+            fi
+        done
+    fi
+
+    # 5) 패키지 매니저 확인
+    if [ -z "$PHP_BIN" ] && [ "$APP_FOUND" = "false" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'php[0-9]' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'php' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$PHP_BIN" ] || [ -n "$PHP_INI" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+
+###############################################################################
+# Pre-flight: 애플리케이션 설치 확인 및 경로 탐지
+###############################################################################
+detect_app
+
+if [ "$APP_FOUND" = "false" ]; then
+    echo "[경고] PHP 이(가) 설치되어 있지 않거나 탐지되지 않았습니다."
+    echo "일부 점검 항목이 N/A로 처리될 수 있습니다."
+    echo ""
+fi
+
+
 # CLD-PHP-01: 오류 메시지 노출
 check_CLD_PHP_01() {
     local status="양호"

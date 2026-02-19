@@ -933,6 +933,23 @@ def build_bash_script(app_key, app_def, items):
     for helper in app_def.get('helpers', []):
         parts.append(_get_custom_helper(helper, app_def))
 
+    # ── Pre-flight detection function
+    parts.append(_get_detect_function(app_key, app_def))
+
+    # ── Pre-flight call
+    parts.append(f'''###############################################################################
+# Pre-flight: 애플리케이션 설치 확인 및 경로 탐지
+###############################################################################
+detect_app
+
+if [ "$APP_FOUND" = "false" ]; then
+    echo "[경고] {platform} 이(가) 설치되어 있지 않거나 탐지되지 않았습니다."
+    echo "일부 점검 항목이 N/A로 처리될 수 있습니다."
+    echo ""
+fi
+
+''')
+
     # ── Check functions
     func_names = []
     for item in items:
@@ -1331,6 +1348,902 @@ run_ceph_cmd() {
 ''',
     }
     return helpers.get(helper_name, f'# Helper {helper_name} not defined\n\n')
+
+
+def _get_detect_function(app_key, app_def):
+    """Return detect_app() bash function for pre-flight application detection."""
+    is_esxi = app_def.get('esxi', False)
+    platform = app_def['platform']
+
+    detect_functions = {
+        'MY-SQL': '''# --- Pre-flight: MySQL 설치 확인 및 경로 탐지 ---
+MYSQL_BIN=""
+MYSQLD_BIN=""
+MYSQL_CONF=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    MYSQL_BIN=$(command -v mysql 2>/dev/null)
+    MYSQLD_BIN=$(command -v mysqld 2>/dev/null)
+
+    # 2) 프로세스에서 탐지
+    if [ -z "$MYSQLD_BIN" ]; then
+        MYSQLD_BIN=$(ps -ef 2>/dev/null | grep '[m]ysqld' | awk '{for(i=1;i<=NF;i++) if($i ~ /mysqld$/) print $i}' | head -1)
+    fi
+
+    # 프로세스에서 --defaults-file 추출
+    local defaults_file
+    defaults_file=$(ps -ef 2>/dev/null | grep '[m]ysqld' | sed -n 's/.*--defaults-file=\\([^ ]*\\).*/\\1/p' | head -1)
+    if [ -n "$defaults_file" ] && [ -f "$defaults_file" ]; then
+        MYSQL_CONF="$defaults_file"
+    fi
+
+    # 3) 공통 설정 파일 경로 탐색
+    if [ -z "$MYSQL_CONF" ]; then
+        for f in /etc/my.cnf /etc/mysql/my.cnf /etc/mysql/mysql.conf.d/mysqld.cnf ~/.my.cnf /usr/local/mysql/my.cnf; do
+            if [ -f "$f" ]; then
+                MYSQL_CONF="$f"
+                break
+            fi
+        done
+    fi
+
+    # 4) 패키지 매니저 확인
+    if [ -z "$MYSQL_BIN" ] && [ -z "$MYSQLD_BIN" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'mysql-server\\|mysql-client\\|mariadb-server' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'mysql-server\\|mysql-community\\|mariadb-server' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$MYSQL_BIN" ] || [ -n "$MYSQLD_BIN" ] || [ -n "$MYSQL_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+        'MS-SQL': '''# --- Pre-flight: MSSQL 설치 확인 및 경로 탐지 ---
+SQLCMD_BIN=""
+MSSQL_CONF=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    SQLCMD_BIN=$(command -v sqlcmd 2>/dev/null)
+    if [ -z "$SQLCMD_BIN" ]; then
+        SQLCMD_BIN=$(command -v mssql-cli 2>/dev/null)
+    fi
+
+    # 2) 프로세스에서 탐지
+    if [ -z "$SQLCMD_BIN" ]; then
+        ps -ef 2>/dev/null | grep -q '[s]qlservr' && APP_FOUND="true"
+    fi
+
+    # 3) 공통 설정 파일 경로 탐색
+    for f in /var/opt/mssql/mssql.conf /opt/mssql/lib/mssql-conf/mssql.conf; do
+        if [ -f "$f" ]; then
+            MSSQL_CONF="$f"
+            break
+        fi
+    done
+
+    # 4) 패키지 매니저 확인
+    if [ -z "$SQLCMD_BIN" ] && [ "$APP_FOUND" = "false" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'mssql-server\\|mssql-tools' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'mssql-server\\|mssql-tools' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$SQLCMD_BIN" ] || [ -n "$MSSQL_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+        'PostgreSQL': '''# --- Pre-flight: PostgreSQL 설치 확인 및 경로 탐지 ---
+PSQL_BIN=""
+PG_DATA=""
+PG_CONF=""
+PG_HBA=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    PSQL_BIN=$(command -v psql 2>/dev/null)
+    local pg_config_bin
+    pg_config_bin=$(command -v pg_config 2>/dev/null)
+
+    # 2) 프로세스에서 data dir 추출
+    local pg_proc
+    pg_proc=$(ps -ef 2>/dev/null | grep '[p]ostgres.*-D' | head -1)
+    if [ -n "$pg_proc" ]; then
+        PG_DATA=$(echo "$pg_proc" | sed -n 's/.*-D[[:space:]]*\\([^ ]*\\).*/\\1/p')
+    fi
+
+    # pg_config 으로 경로 추출
+    if [ -z "$PG_DATA" ] && [ -n "$pg_config_bin" ]; then
+        local sharedir
+        sharedir=$($pg_config_bin --sharedir 2>/dev/null)
+        if [ -n "$sharedir" ]; then
+            PG_DATA=$(dirname "$sharedir")/data
+            [ ! -d "$PG_DATA" ] && PG_DATA=""
+        fi
+    fi
+
+    # 3) 공통 경로 탐색
+    if [ -z "$PG_DATA" ]; then
+        for d in /var/lib/postgresql/*/main /var/lib/pgsql/*/data /var/lib/pgsql/data /usr/local/pgsql/data; do
+            if [ -d "$d" ]; then
+                PG_DATA="$d"
+                break
+            fi
+        done
+    fi
+
+    # 설정 파일 경로 확정
+    if [ -n "$PG_DATA" ]; then
+        [ -f "$PG_DATA/postgresql.conf" ] && PG_CONF="$PG_DATA/postgresql.conf"
+        [ -f "$PG_DATA/pg_hba.conf" ] && PG_HBA="$PG_DATA/pg_hba.conf"
+    fi
+    # Debian/Ubuntu 스타일
+    if [ -z "$PG_CONF" ]; then
+        for f in /etc/postgresql/*/main/postgresql.conf; do
+            if [ -f "$f" ]; then
+                PG_CONF="$f"
+                PG_HBA="$(dirname "$f")/pg_hba.conf"
+                break
+            fi
+        done
+    fi
+
+    # 4) 패키지 매니저 확인
+    if [ -z "$PSQL_BIN" ] && [ -z "$PG_DATA" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'postgresql' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'postgresql' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$PSQL_BIN" ] || [ -n "$PG_DATA" ] || [ -n "$PG_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+        'Redis': '''# --- Pre-flight: Redis 설치 확인 및 경로 탐지 ---
+REDIS_CLI=""
+REDIS_CONF=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    REDIS_CLI=$(command -v redis-cli 2>/dev/null)
+    local redis_server_bin
+    redis_server_bin=$(command -v redis-server 2>/dev/null)
+
+    # 2) 프로세스에서 config 경로 추출
+    local redis_proc
+    redis_proc=$(ps -ef 2>/dev/null | grep '[r]edis-server' | head -1)
+    if [ -n "$redis_proc" ]; then
+        # redis-server /path/to/redis.conf 형태에서 추출
+        local conf_from_proc
+        conf_from_proc=$(echo "$redis_proc" | grep -oP '\\S+redis\\.conf' | head -1)
+        if [ -n "$conf_from_proc" ] && [ -f "$conf_from_proc" ]; then
+            REDIS_CONF="$conf_from_proc"
+        fi
+    fi
+
+    # 3) 공통 설정 파일 경로 탐색
+    if [ -z "$REDIS_CONF" ]; then
+        for f in /etc/redis/redis.conf /etc/redis.conf /etc/redis/6379.conf /usr/local/etc/redis.conf; do
+            if [ -f "$f" ]; then
+                REDIS_CONF="$f"
+                break
+            fi
+        done
+    fi
+
+    # 4) 패키지 매니저 확인
+    if [ -z "$REDIS_CLI" ] && [ -z "$redis_server_bin" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'redis-server' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'redis' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$REDIS_CLI" ] || [ -n "$redis_server_bin" ] || [ -n "$REDIS_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+        'Elasticsearch': '''# --- Pre-flight: Elasticsearch 설치 확인 및 경로 탐지 ---
+ES_CONF=""
+ES_URL="${ES_URL:-http://localhost:9200}"
+APP_FOUND="false"
+
+detect_app() {
+    local es_bin
+    es_bin=$(command -v elasticsearch 2>/dev/null)
+
+    # 1) curl 로 ES 응답 확인
+    local es_response
+    es_response=$(curl -s -m 5 "$ES_URL" 2>/dev/null)
+    if echo "$es_response" | grep -q '"tagline"'; then
+        APP_FOUND="true"
+    fi
+
+    # 2) 프로세스에서 탐지
+    local es_proc
+    es_proc=$(ps -ef 2>/dev/null | grep '[e]lasticsearch' | grep -v grep | head -1)
+    if [ -n "$es_proc" ]; then
+        APP_FOUND="true"
+        # -Epath.conf 추출
+        local conf_from_proc
+        conf_from_proc=$(echo "$es_proc" | grep -oP '\\-Epath\\.conf=\\K[^ ]+' | head -1)
+        if [ -n "$conf_from_proc" ] && [ -d "$conf_from_proc" ]; then
+            ES_CONF="$conf_from_proc/elasticsearch.yml"
+        fi
+    fi
+
+    # 3) 공통 설정 파일 경로 탐색
+    if [ -z "$ES_CONF" ]; then
+        for f in /etc/elasticsearch/elasticsearch.yml /usr/local/etc/elasticsearch/elasticsearch.yml; do
+            if [ -f "$f" ]; then
+                ES_CONF="$f"
+                break
+            fi
+        done
+    fi
+
+    # 4) 패키지 매니저 확인
+    if [ "$APP_FOUND" = "false" ] && [ -z "$es_bin" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'elasticsearch' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'elasticsearch' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$es_bin" ] || [ -n "$ES_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+        'MongoDB': '''# --- Pre-flight: MongoDB 설치 확인 및 경로 탐지 ---
+MONGO_BIN=""
+MONGOD_CONF=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    MONGO_BIN=$(command -v mongosh 2>/dev/null)
+    if [ -z "$MONGO_BIN" ]; then
+        MONGO_BIN=$(command -v mongo 2>/dev/null)
+    fi
+    local mongod_bin
+    mongod_bin=$(command -v mongod 2>/dev/null)
+
+    # 2) 프로세스에서 --config 추출
+    local mongod_proc
+    mongod_proc=$(ps -ef 2>/dev/null | grep '[m]ongod' | grep -v mongos | head -1)
+    if [ -n "$mongod_proc" ]; then
+        APP_FOUND="true"
+        local conf_from_proc
+        conf_from_proc=$(echo "$mongod_proc" | sed -n 's/.*--config[= ]\\([^ ]*\\).*/\\1/p')
+        if [ -n "$conf_from_proc" ] && [ -f "$conf_from_proc" ]; then
+            MONGOD_CONF="$conf_from_proc"
+        fi
+    fi
+
+    # 3) 공통 설정 파일 경로 탐색
+    if [ -z "$MONGOD_CONF" ]; then
+        for f in /etc/mongod.conf /etc/mongodb.conf /usr/local/etc/mongod.conf; do
+            if [ -f "$f" ]; then
+                MONGOD_CONF="$f"
+                break
+            fi
+        done
+    fi
+
+    # 4) 패키지 매니저 확인
+    if [ -z "$MONGO_BIN" ] && [ -z "$mongod_bin" ] && [ "$APP_FOUND" = "false" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'mongodb\\|mongod' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'mongodb\\|mongod' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$MONGO_BIN" ] || [ -n "$mongod_bin" ] || [ -n "$MONGOD_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+        'Apache': '''# --- Pre-flight: Apache 설치 확인 및 경로 탐지 ---
+APACHE_BIN=""
+APACHE_CONF=""
+APACHE_CONF_DIR=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    APACHE_BIN=$(command -v httpd 2>/dev/null)
+    if [ -z "$APACHE_BIN" ]; then
+        APACHE_BIN=$(command -v apache2 2>/dev/null)
+    fi
+    if [ -z "$APACHE_BIN" ]; then
+        APACHE_BIN=$(command -v apachectl 2>/dev/null)
+    fi
+
+    # 2) 프로세스에서 탐지
+    if [ -z "$APACHE_BIN" ]; then
+        local apache_proc
+        apache_proc=$(ps -ef 2>/dev/null | grep -E '[h]ttpd|[a]pache2' | head -1)
+        if [ -n "$apache_proc" ]; then
+            APACHE_BIN=$(echo "$apache_proc" | awk '{print $8}')
+            APP_FOUND="true"
+        fi
+    fi
+
+    # 3) -V 로 설정 경로 추출
+    if [ -n "$APACHE_BIN" ]; then
+        local server_root
+        server_root=$("$APACHE_BIN" -V 2>/dev/null | sed -n 's/.*HTTPD_ROOT="\\(.*\\)"/\\1/p')
+        local server_config
+        server_config=$("$APACHE_BIN" -V 2>/dev/null | sed -n 's/.*SERVER_CONFIG_FILE="\\(.*\\)"/\\1/p')
+        if [ -n "$server_root" ] && [ -n "$server_config" ]; then
+            if echo "$server_config" | grep -q '^/'; then
+                APACHE_CONF="$server_config"
+            else
+                APACHE_CONF="$server_root/$server_config"
+            fi
+        fi
+    fi
+
+    # 4) 공통 설정 파일 경로 탐색
+    if [ -z "$APACHE_CONF" ]; then
+        for f in /etc/httpd/conf/httpd.conf /etc/apache2/apache2.conf /usr/local/apache2/conf/httpd.conf; do
+            if [ -f "$f" ]; then
+                APACHE_CONF="$f"
+                break
+            fi
+        done
+    fi
+    if [ -n "$APACHE_CONF" ]; then
+        APACHE_CONF_DIR=$(dirname "$APACHE_CONF")
+    fi
+
+    # 5) 패키지 매니저 확인
+    if [ -z "$APACHE_BIN" ] && [ -z "$APACHE_CONF" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'apache2\\|httpd' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'httpd\\|apache' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$APACHE_BIN" ] || [ -n "$APACHE_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+        'Nginx': '''# --- Pre-flight: Nginx 설치 확인 및 경로 탐지 ---
+NGINX_BIN=""
+NGINX_CONF=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    NGINX_BIN=$(command -v nginx 2>/dev/null)
+
+    # 2) 프로세스에서 탐지
+    if [ -z "$NGINX_BIN" ]; then
+        local nginx_proc
+        nginx_proc=$(ps -ef 2>/dev/null | grep '[n]ginx.*master' | head -1)
+        if [ -n "$nginx_proc" ]; then
+            NGINX_BIN=$(echo "$nginx_proc" | awk '{print $8}')
+            APP_FOUND="true"
+        fi
+    fi
+
+    # 3) nginx -t 로 conf 경로 추출
+    if [ -n "$NGINX_BIN" ]; then
+        local nginx_test
+        nginx_test=$("$NGINX_BIN" -t 2>&1)
+        local conf_from_test
+        conf_from_test=$(echo "$nginx_test" | sed -n 's/.*configuration file \\(.*\\) test.*/\\1/p')
+        if [ -n "$conf_from_test" ] && [ -f "$conf_from_test" ]; then
+            NGINX_CONF="$conf_from_test"
+        fi
+    fi
+
+    # 4) 공통 설정 파일 경로 탐색
+    if [ -z "$NGINX_CONF" ]; then
+        for f in /etc/nginx/nginx.conf /usr/local/nginx/conf/nginx.conf /usr/local/etc/nginx/nginx.conf; do
+            if [ -f "$f" ]; then
+                NGINX_CONF="$f"
+                break
+            fi
+        done
+    fi
+
+    # 5) 패키지 매니저 확인
+    if [ -z "$NGINX_BIN" ] && [ -z "$NGINX_CONF" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'nginx' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'nginx' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$NGINX_BIN" ] || [ -n "$NGINX_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+        'Tomcat': '''# --- Pre-flight: Tomcat 설치 확인 및 경로 탐지 ---
+APP_FOUND="false"
+
+detect_app() {
+    # 1) CATALINA_HOME 이 이미 설정되어 있는지 확인
+    if [ -n "$CATALINA_HOME" ] && [ -d "$CATALINA_HOME" ]; then
+        APP_FOUND="true"
+    fi
+
+    # 2) 프로세스에서 -Dcatalina.home 추출
+    if [ "$APP_FOUND" = "false" ]; then
+        local tomcat_proc
+        tomcat_proc=$(ps -ef 2>/dev/null | grep -E '[c]atalina|[t]omcat' | head -1)
+        if [ -n "$tomcat_proc" ]; then
+            local home_from_proc
+            home_from_proc=$(echo "$tomcat_proc" | grep -oP '\\-Dcatalina\\.home=\\K[^ ]+' | head -1)
+            if [ -n "$home_from_proc" ] && [ -d "$home_from_proc" ]; then
+                CATALINA_HOME="$home_from_proc"
+                APP_FOUND="true"
+            fi
+        fi
+    fi
+
+    # 3) 공통 설치 경로 탐색
+    if [ "$APP_FOUND" = "false" ]; then
+        for d in /usr/share/tomcat* /opt/tomcat* /var/lib/tomcat* /usr/local/tomcat*; do
+            if [ -d "$d" ] && [ -f "$d/conf/server.xml" ]; then
+                CATALINA_HOME="$d"
+                APP_FOUND="true"
+                break
+            fi
+        done
+    fi
+
+    # 4) 패키지 매니저 확인
+    if [ "$APP_FOUND" = "false" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'tomcat' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'tomcat' && APP_FOUND="true"
+        fi
+    fi
+}
+
+''',
+        'Docker': '''# --- Pre-flight: Docker 설치 확인 및 경로 탐지 ---
+DOCKER_BIN=""
+DOCKER_CONF=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    DOCKER_BIN=$(command -v docker 2>/dev/null)
+
+    # 2) 프로세스에서 탐지
+    if [ -z "$DOCKER_BIN" ]; then
+        ps -ef 2>/dev/null | grep -q '[d]ockerd' && APP_FOUND="true"
+    fi
+
+    # 3) 공통 설정 파일 경로 탐색
+    for f in /etc/docker/daemon.json ~/.docker/daemon.json; do
+        if [ -f "$f" ]; then
+            DOCKER_CONF="$f"
+            break
+        fi
+    done
+
+    # 4) 패키지 매니저 확인
+    if [ -z "$DOCKER_BIN" ] && [ "$APP_FOUND" = "false" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'docker-ce\\|docker.io' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'docker-ce\\|docker' && APP_FOUND="true"
+        fi
+    fi
+
+    # 5) Docker 소켓 확인
+    if [ -S /var/run/docker.sock ]; then
+        APP_FOUND="true"
+    fi
+
+    # 판정
+    if [ -n "$DOCKER_BIN" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+        'K8s(Master)': '''# --- Pre-flight: Kubernetes Master 설치 확인 및 경로 탐지 ---
+KUBECTL_BIN=""
+K8S_MANIFEST_DIR=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    KUBECTL_BIN=$(command -v kubectl 2>/dev/null)
+
+    # 2) 프로세스에서 kube-apiserver 탐지
+    local apiserver_proc
+    apiserver_proc=$(ps -ef 2>/dev/null | grep '[k]ube-apiserver' | head -1)
+    if [ -n "$apiserver_proc" ]; then
+        APP_FOUND="true"
+    fi
+
+    # 3) 매니페스트 디렉토리 탐색
+    for d in /etc/kubernetes/manifests /etc/kubernetes; do
+        if [ -d "$d" ]; then
+            K8S_MANIFEST_DIR="$d"
+            break
+        fi
+    done
+
+    # 4) kubeconfig 확인
+    if [ -f /etc/kubernetes/admin.conf ] || [ -f "$HOME/.kube/config" ]; then
+        APP_FOUND="true"
+    fi
+
+    # 판정
+    if [ -n "$KUBECTL_BIN" ] || [ -n "$K8S_MANIFEST_DIR" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+        'K8s(Worker)': '''# --- Pre-flight: Kubernetes Worker 설치 확인 및 경로 탐지 ---
+KUBECTL_BIN=""
+KUBELET_CONF=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    KUBECTL_BIN=$(command -v kubectl 2>/dev/null)
+    local kubelet_bin
+    kubelet_bin=$(command -v kubelet 2>/dev/null)
+
+    # 2) 프로세스에서 kubelet 탐지
+    local kubelet_proc
+    kubelet_proc=$(ps -ef 2>/dev/null | grep '[k]ubelet' | head -1)
+    if [ -n "$kubelet_proc" ]; then
+        APP_FOUND="true"
+        # --config 추출
+        local conf_from_proc
+        conf_from_proc=$(echo "$kubelet_proc" | sed -n 's/.*--config[= ]\\([^ ]*\\).*/\\1/p')
+        if [ -n "$conf_from_proc" ] && [ -f "$conf_from_proc" ]; then
+            KUBELET_CONF="$conf_from_proc"
+        fi
+    fi
+
+    # 3) 공통 설정 경로 탐색
+    if [ -z "$KUBELET_CONF" ]; then
+        for f in /var/lib/kubelet/config.yaml /etc/kubernetes/kubelet.conf; do
+            if [ -f "$f" ]; then
+                KUBELET_CONF="$f"
+                break
+            fi
+        done
+    fi
+
+    # 판정
+    if [ -n "$kubelet_bin" ] || [ -n "$KUBELET_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+        'KVM': '''# --- Pre-flight: KVM 설치 확인 및 경로 탐지 ---
+VIRSH_BIN=""
+LIBVIRT_CONF=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    VIRSH_BIN=$(command -v virsh 2>/dev/null)
+
+    # 2) 프로세스에서 libvirtd/qemu 탐지
+    if ps -ef 2>/dev/null | grep -qE '[l]ibvirtd|[q]emu'; then
+        APP_FOUND="true"
+    fi
+
+    # 3) 공통 설정 경로 탐색
+    if [ -d "/etc/libvirt" ]; then
+        LIBVIRT_CONF="/etc/libvirt"
+    fi
+
+    # 4) 패키지 매니저 확인
+    if [ -z "$VIRSH_BIN" ] && [ "$APP_FOUND" = "false" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'libvirt\\|qemu-kvm' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'libvirt\\|qemu-kvm' && APP_FOUND="true"
+        fi
+    fi
+
+    # 5) KVM 모듈 확인
+    if lsmod 2>/dev/null | grep -q kvm; then
+        APP_FOUND="true"
+    fi
+
+    # 판정
+    if [ -n "$VIRSH_BIN" ] || [ -n "$LIBVIRT_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+        'Xenserver': '''# --- Pre-flight: Xenserver 설치 확인 및 경로 탐지 ---
+XE_BIN=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    XE_BIN=$(command -v xe 2>/dev/null)
+
+    # 2) 프로세스에서 xapi 탐지
+    if ps -ef 2>/dev/null | grep -q '[x]api'; then
+        APP_FOUND="true"
+    fi
+
+    # 3) Xenserver 환경 파일 확인
+    if [ -f "/etc/xensource-inventory" ]; then
+        APP_FOUND="true"
+    fi
+
+    # 판정
+    if [ -n "$XE_BIN" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+        'ESXi': '''# --- Pre-flight: ESXi 설치 확인 및 경로 탐지 ---
+ESXCLI_BIN=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) 바이너리 탐지 (ESXi BusyBox 환경)
+    if [ -x "/bin/esxcli" ] || [ -x "/sbin/esxcli" ]; then
+        ESXCLI_BIN="esxcli"
+        APP_FOUND="true"
+    fi
+    if which vim-cmd >/dev/null 2>&1; then
+        APP_FOUND="true"
+    fi
+
+    # 2) ESXi 환경 자체 확인
+    if [ -f "/etc/vmware/esx.conf" ]; then
+        APP_FOUND="true"
+    fi
+    if [ -d "/etc/vmware" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+        'PHP': '''# --- Pre-flight: PHP 설치 확인 및 경로 탐지 ---
+PHP_BIN=""
+PHP_INI=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    PHP_BIN=$(command -v php 2>/dev/null)
+
+    # 2) 프로세스에서 php-fpm 탐지
+    if ps -ef 2>/dev/null | grep -q '[p]hp-fpm'; then
+        APP_FOUND="true"
+    fi
+
+    # 3) php --ini 로 설정 경로 추출
+    if [ -n "$PHP_BIN" ]; then
+        PHP_INI=$("$PHP_BIN" --ini 2>/dev/null | sed -n 's/.*Loaded Configuration File:[[:space:]]*\\(.*\\)/\\1/p')
+        if [ -z "$PHP_INI" ] || [ "$PHP_INI" = "(none)" ]; then
+            PHP_INI=""
+        fi
+    fi
+
+    # 4) 공통 설정 파일 경로 탐색
+    if [ -z "$PHP_INI" ]; then
+        for f in /etc/php/*/cli/php.ini /etc/php/*/fpm/php.ini /etc/php.ini /usr/local/etc/php/php.ini; do
+            if [ -f "$f" ]; then
+                PHP_INI="$f"
+                break
+            fi
+        done
+    fi
+
+    # 5) 패키지 매니저 확인
+    if [ -z "$PHP_BIN" ] && [ "$APP_FOUND" = "false" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'php[0-9]' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'php' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$PHP_BIN" ] || [ -n "$PHP_INI" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+        'NodeJS': '''# --- Pre-flight: Node.js 설치 확인 및 경로 탐지 ---
+NODE_BIN=""
+NPM_BIN=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    NODE_BIN=$(command -v node 2>/dev/null)
+    NPM_BIN=$(command -v npm 2>/dev/null)
+
+    # 2) 프로세스에서 node 탐지
+    if [ -z "$NODE_BIN" ]; then
+        if ps -ef 2>/dev/null | grep -q '[n]ode '; then
+            APP_FOUND="true"
+        fi
+    fi
+
+    # 3) nvm 환경 확인
+    if [ -z "$NODE_BIN" ] && [ -d "$HOME/.nvm" ]; then
+        local nvm_node
+        nvm_node=$(ls -d "$HOME/.nvm/versions/node"/*/bin/node 2>/dev/null | tail -1)
+        if [ -n "$nvm_node" ] && [ -x "$nvm_node" ]; then
+            NODE_BIN="$nvm_node"
+        fi
+    fi
+
+    # 4) 패키지 매니저 확인
+    if [ -z "$NODE_BIN" ] && [ "$APP_FOUND" = "false" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'nodejs' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'nodejs' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$NODE_BIN" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+        'Hadoop': '''# --- Pre-flight: Hadoop 설치 확인 및 경로 탐지 ---
+HADOOP_BIN=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    HADOOP_BIN=$(command -v hadoop 2>/dev/null)
+    local hdfs_bin
+    hdfs_bin=$(command -v hdfs 2>/dev/null)
+
+    # 2) 프로세스에서 hadoop/NameNode 탐지
+    if ps -ef 2>/dev/null | grep -qE '[h]adoop|[N]ameNode|[D]ataNode'; then
+        APP_FOUND="true"
+    fi
+
+    # 3) HADOOP_HOME 환경 변수 확인
+    if [ -n "$HADOOP_HOME" ] && [ -d "$HADOOP_HOME" ]; then
+        APP_FOUND="true"
+        if [ -z "$HADOOP_BIN" ] && [ -x "$HADOOP_HOME/bin/hadoop" ]; then
+            HADOOP_BIN="$HADOOP_HOME/bin/hadoop"
+        fi
+    fi
+
+    # 4) HADOOP_CONF_DIR 확인 및 탐색
+    if [ ! -d "$HADOOP_CONF_DIR" ]; then
+        for d in /etc/hadoop/conf /opt/hadoop*/etc/hadoop /usr/lib/hadoop/etc/hadoop /usr/local/hadoop/etc/hadoop; do
+            if [ -d "$d" ]; then
+                HADOOP_CONF_DIR="$d"
+                break
+            fi
+        done
+    fi
+
+    # 5) 패키지 매니저 확인
+    if [ -z "$HADOOP_BIN" ] && [ -z "$hdfs_bin" ] && [ "$APP_FOUND" = "false" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'hadoop' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'hadoop' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$HADOOP_BIN" ] || [ -n "$hdfs_bin" ] || [ -d "$HADOOP_CONF_DIR" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+        'Ceph': '''# --- Pre-flight: Ceph 설치 확인 및 경로 탐지 ---
+CEPH_BIN=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    CEPH_BIN=$(command -v ceph 2>/dev/null)
+    local rados_bin
+    rados_bin=$(command -v rados 2>/dev/null)
+
+    # 2) 프로세스에서 ceph-mon/ceph-osd 탐지
+    if ps -ef 2>/dev/null | grep -qE '[c]eph-mon|[c]eph-osd|[c]eph-mgr'; then
+        APP_FOUND="true"
+    fi
+
+    # 3) 공통 설정 파일 경로 탐색
+    if [ ! -f "$CEPH_CONF" ]; then
+        for f in /etc/ceph/ceph.conf /usr/local/etc/ceph/ceph.conf; do
+            if [ -f "$f" ]; then
+                CEPH_CONF="$f"
+                break
+            fi
+        done
+    fi
+
+    # 4) 패키지 매니저 확인
+    if [ -z "$CEPH_BIN" ] && [ -z "$rados_bin" ] && [ "$APP_FOUND" = "false" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'ceph-common\\|ceph-mon' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'ceph' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$CEPH_BIN" ] || [ -n "$rados_bin" ] || [ -f "$CEPH_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+''',
+    }
+
+    return detect_functions.get(app_key, f'''# --- Pre-flight: {platform} 설치 확인 ---
+APP_FOUND="false"
+
+detect_app() {{
+    APP_FOUND="true"
+}}
+
+''')
 
 
 def _build_json_output(platform, total_items, is_esxi=False):

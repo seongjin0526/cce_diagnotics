@@ -92,6 +92,59 @@ run_kubectl() {
 }
 
 
+# --- Pre-flight: Kubernetes Worker 설치 확인 및 경로 탐지 ---
+KUBECTL_BIN=""
+KUBELET_CONF=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    KUBECTL_BIN=$(command -v kubectl 2>/dev/null)
+    local kubelet_bin
+    kubelet_bin=$(command -v kubelet 2>/dev/null)
+
+    # 2) 프로세스에서 kubelet 탐지
+    local kubelet_proc
+    kubelet_proc=$(ps -ef 2>/dev/null | grep '[k]ubelet' | head -1)
+    if [ -n "$kubelet_proc" ]; then
+        APP_FOUND="true"
+        # --config 추출
+        local conf_from_proc
+        conf_from_proc=$(echo "$kubelet_proc" | sed -n 's/.*--config[= ]\([^ ]*\).*/\1/p')
+        if [ -n "$conf_from_proc" ] && [ -f "$conf_from_proc" ]; then
+            KUBELET_CONF="$conf_from_proc"
+        fi
+    fi
+
+    # 3) 공통 설정 경로 탐색
+    if [ -z "$KUBELET_CONF" ]; then
+        for f in /var/lib/kubelet/config.yaml /etc/kubernetes/kubelet.conf; do
+            if [ -f "$f" ]; then
+                KUBELET_CONF="$f"
+                break
+            fi
+        done
+    fi
+
+    # 판정
+    if [ -n "$kubelet_bin" ] || [ -n "$KUBELET_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+
+###############################################################################
+# Pre-flight: 애플리케이션 설치 확인 및 경로 탐지
+###############################################################################
+detect_app
+
+if [ "$APP_FOUND" = "false" ]; then
+    echo "[경고] Kubernetes(Worker) 이(가) 설치되어 있지 않거나 탐지되지 않았습니다."
+    echo "일부 점검 항목이 N/A로 처리될 수 있습니다."
+    echo ""
+fi
+
+
 # CLD-K8sWorker-01: Kubelet 인증 제어
 check_CLD_K8sWorker_01() {
     local status="양호"

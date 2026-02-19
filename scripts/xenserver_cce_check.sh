@@ -92,6 +92,43 @@ run_xe() {
 }
 
 
+# --- Pre-flight: Xenserver 설치 확인 및 경로 탐지 ---
+XE_BIN=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    XE_BIN=$(command -v xe 2>/dev/null)
+
+    # 2) 프로세스에서 xapi 탐지
+    if ps -ef 2>/dev/null | grep -q '[x]api'; then
+        APP_FOUND="true"
+    fi
+
+    # 3) Xenserver 환경 파일 확인
+    if [ -f "/etc/xensource-inventory" ]; then
+        APP_FOUND="true"
+    fi
+
+    # 판정
+    if [ -n "$XE_BIN" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+
+###############################################################################
+# Pre-flight: 애플리케이션 설치 확인 및 경로 탐지
+###############################################################################
+detect_app
+
+if [ "$APP_FOUND" = "false" ]; then
+    echo "[경고] Xenserver 이(가) 설치되어 있지 않거나 탐지되지 않았습니다."
+    echo "일부 점검 항목이 N/A로 처리될 수 있습니다."
+    echo ""
+fi
+
+
 # CLD-Xenserver-02 / HV-04: 일반계정 root 권한 관리
 check_CLD_Xenserver_02() {
     local status="양호"

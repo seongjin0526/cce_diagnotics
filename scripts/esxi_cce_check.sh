@@ -92,6 +92,42 @@ run_esxcli() {
 }
 
 
+# --- Pre-flight: ESXi 설치 확인 및 경로 탐지 ---
+ESXCLI_BIN=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) 바이너리 탐지 (ESXi BusyBox 환경)
+    if [ -x "/bin/esxcli" ] || [ -x "/sbin/esxcli" ]; then
+        ESXCLI_BIN="esxcli"
+        APP_FOUND="true"
+    fi
+    if which vim-cmd >/dev/null 2>&1; then
+        APP_FOUND="true"
+    fi
+
+    # 2) ESXi 환경 자체 확인
+    if [ -f "/etc/vmware/esx.conf" ]; then
+        APP_FOUND="true"
+    fi
+    if [ -d "/etc/vmware" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+
+###############################################################################
+# Pre-flight: 애플리케이션 설치 확인 및 경로 탐지
+###############################################################################
+detect_app
+
+if [ "$APP_FOUND" = "false" ]; then
+    echo "[경고] ESXi 이(가) 설치되어 있지 않거나 탐지되지 않았습니다."
+    echo "일부 점검 항목이 N/A로 처리될 수 있습니다."
+    echo ""
+fi
+
+
 # CLD-ESXi-03 / HV-07: 계정 잠금 임계값 설정
 check_CLD_ESXi_03() {
     local status="양호"

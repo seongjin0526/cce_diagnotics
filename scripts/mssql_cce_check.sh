@@ -122,6 +122,59 @@ run_mssql_query() {
 }
 
 
+# --- Pre-flight: MSSQL 설치 확인 및 경로 탐지 ---
+SQLCMD_BIN=""
+MSSQL_CONF=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    SQLCMD_BIN=$(command -v sqlcmd 2>/dev/null)
+    if [ -z "$SQLCMD_BIN" ]; then
+        SQLCMD_BIN=$(command -v mssql-cli 2>/dev/null)
+    fi
+
+    # 2) 프로세스에서 탐지
+    if [ -z "$SQLCMD_BIN" ]; then
+        ps -ef 2>/dev/null | grep -q '[s]qlservr' && APP_FOUND="true"
+    fi
+
+    # 3) 공통 설정 파일 경로 탐색
+    for f in /var/opt/mssql/mssql.conf /opt/mssql/lib/mssql-conf/mssql.conf; do
+        if [ -f "$f" ]; then
+            MSSQL_CONF="$f"
+            break
+        fi
+    done
+
+    # 4) 패키지 매니저 확인
+    if [ -z "$SQLCMD_BIN" ] && [ "$APP_FOUND" = "false" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'mssql-server\|mssql-tools' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'mssql-server\|mssql-tools' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$SQLCMD_BIN" ] || [ -n "$MSSQL_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+
+###############################################################################
+# Pre-flight: 애플리케이션 설치 확인 및 경로 탐지
+###############################################################################
+detect_app
+
+if [ "$APP_FOUND" = "false" ]; then
+    echo "[경고] MSSQL 이(가) 설치되어 있지 않거나 탐지되지 않았습니다."
+    echo "일부 점검 항목이 N/A로 처리될 수 있습니다."
+    echo ""
+fi
+
+
 # CLD-MS-SQL-05 / D-24: Regisrtry Procedure Permission 제한
 check_CLD_MS_SQL_05() {
     local status="양호"

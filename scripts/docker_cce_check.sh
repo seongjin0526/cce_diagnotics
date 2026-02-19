@@ -92,6 +92,61 @@ run_docker_cmd() {
 }
 
 
+# --- Pre-flight: Docker 설치 확인 및 경로 탐지 ---
+DOCKER_BIN=""
+DOCKER_CONF=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    DOCKER_BIN=$(command -v docker 2>/dev/null)
+
+    # 2) 프로세스에서 탐지
+    if [ -z "$DOCKER_BIN" ]; then
+        ps -ef 2>/dev/null | grep -q '[d]ockerd' && APP_FOUND="true"
+    fi
+
+    # 3) 공통 설정 파일 경로 탐색
+    for f in /etc/docker/daemon.json ~/.docker/daemon.json; do
+        if [ -f "$f" ]; then
+            DOCKER_CONF="$f"
+            break
+        fi
+    done
+
+    # 4) 패키지 매니저 확인
+    if [ -z "$DOCKER_BIN" ] && [ "$APP_FOUND" = "false" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'docker-ce\|docker.io' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'docker-ce\|docker' && APP_FOUND="true"
+        fi
+    fi
+
+    # 5) Docker 소켓 확인
+    if [ -S /var/run/docker.sock ]; then
+        APP_FOUND="true"
+    fi
+
+    # 판정
+    if [ -n "$DOCKER_BIN" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+
+###############################################################################
+# Pre-flight: 애플리케이션 설치 확인 및 경로 탐지
+###############################################################################
+detect_app
+
+if [ "$APP_FOUND" = "false" ]; then
+    echo "[경고] Docker 이(가) 설치되어 있지 않거나 탐지되지 않았습니다."
+    echo "일부 점검 항목이 N/A로 처리될 수 있습니다."
+    echo ""
+fi
+
+
 # CLD-Docker-01: 도커 최신 보안 패치 적용
 check_CLD_Docker_01() {
     local status="양호"

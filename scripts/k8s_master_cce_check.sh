@@ -92,6 +92,54 @@ run_kubectl() {
 }
 
 
+# --- Pre-flight: Kubernetes Master 설치 확인 및 경로 탐지 ---
+KUBECTL_BIN=""
+K8S_MANIFEST_DIR=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    KUBECTL_BIN=$(command -v kubectl 2>/dev/null)
+
+    # 2) 프로세스에서 kube-apiserver 탐지
+    local apiserver_proc
+    apiserver_proc=$(ps -ef 2>/dev/null | grep '[k]ube-apiserver' | head -1)
+    if [ -n "$apiserver_proc" ]; then
+        APP_FOUND="true"
+    fi
+
+    # 3) 매니페스트 디렉토리 탐색
+    for d in /etc/kubernetes/manifests /etc/kubernetes; do
+        if [ -d "$d" ]; then
+            K8S_MANIFEST_DIR="$d"
+            break
+        fi
+    done
+
+    # 4) kubeconfig 확인
+    if [ -f /etc/kubernetes/admin.conf ] || [ -f "$HOME/.kube/config" ]; then
+        APP_FOUND="true"
+    fi
+
+    # 판정
+    if [ -n "$KUBECTL_BIN" ] || [ -n "$K8S_MANIFEST_DIR" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+
+###############################################################################
+# Pre-flight: 애플리케이션 설치 확인 및 경로 탐지
+###############################################################################
+detect_app
+
+if [ "$APP_FOUND" = "false" ]; then
+    echo "[경고] Kubernetes(Master) 이(가) 설치되어 있지 않거나 탐지되지 않았습니다."
+    echo "일부 점검 항목이 N/A로 처리될 수 있습니다."
+    echo ""
+fi
+
+
 # CLD-K8sMaster-01: API sever 비인증 접근 차단
 check_CLD_K8sMaster_01() {
     local status="양호"

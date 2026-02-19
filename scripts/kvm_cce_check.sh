@@ -92,6 +92,58 @@ run_virsh() {
 }
 
 
+# --- Pre-flight: KVM 설치 확인 및 경로 탐지 ---
+VIRSH_BIN=""
+LIBVIRT_CONF=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    VIRSH_BIN=$(command -v virsh 2>/dev/null)
+
+    # 2) 프로세스에서 libvirtd/qemu 탐지
+    if ps -ef 2>/dev/null | grep -qE '[l]ibvirtd|[q]emu'; then
+        APP_FOUND="true"
+    fi
+
+    # 3) 공통 설정 경로 탐색
+    if [ -d "/etc/libvirt" ]; then
+        LIBVIRT_CONF="/etc/libvirt"
+    fi
+
+    # 4) 패키지 매니저 확인
+    if [ -z "$VIRSH_BIN" ] && [ "$APP_FOUND" = "false" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'libvirt\|qemu-kvm' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'libvirt\|qemu-kvm' && APP_FOUND="true"
+        fi
+    fi
+
+    # 5) KVM 모듈 확인
+    if lsmod 2>/dev/null | grep -q kvm; then
+        APP_FOUND="true"
+    fi
+
+    # 판정
+    if [ -n "$VIRSH_BIN" ] || [ -n "$LIBVIRT_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+
+###############################################################################
+# Pre-flight: 애플리케이션 설치 확인 및 경로 탐지
+###############################################################################
+detect_app
+
+if [ "$APP_FOUND" = "false" ]; then
+    echo "[경고] KVM 이(가) 설치되어 있지 않거나 탐지되지 않았습니다."
+    echo "일부 점검 항목이 N/A로 처리될 수 있습니다."
+    echo ""
+fi
+
+
 # CLD-KVM-01: 불필요한 계정 제거
 check_CLD_KVM_01() {
     local status="양호"

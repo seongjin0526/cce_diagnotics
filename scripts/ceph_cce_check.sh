@@ -94,6 +94,59 @@ run_ceph_cmd() {
 }
 
 
+# --- Pre-flight: Ceph 설치 확인 및 경로 탐지 ---
+CEPH_BIN=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    CEPH_BIN=$(command -v ceph 2>/dev/null)
+    local rados_bin
+    rados_bin=$(command -v rados 2>/dev/null)
+
+    # 2) 프로세스에서 ceph-mon/ceph-osd 탐지
+    if ps -ef 2>/dev/null | grep -qE '[c]eph-mon|[c]eph-osd|[c]eph-mgr'; then
+        APP_FOUND="true"
+    fi
+
+    # 3) 공통 설정 파일 경로 탐색
+    if [ ! -f "$CEPH_CONF" ]; then
+        for f in /etc/ceph/ceph.conf /usr/local/etc/ceph/ceph.conf; do
+            if [ -f "$f" ]; then
+                CEPH_CONF="$f"
+                break
+            fi
+        done
+    fi
+
+    # 4) 패키지 매니저 확인
+    if [ -z "$CEPH_BIN" ] && [ -z "$rados_bin" ] && [ "$APP_FOUND" = "false" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'ceph-common\|ceph-mon' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'ceph' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$CEPH_BIN" ] || [ -n "$rados_bin" ] || [ -f "$CEPH_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+
+###############################################################################
+# Pre-flight: 애플리케이션 설치 확인 및 경로 탐지
+###############################################################################
+detect_app
+
+if [ "$APP_FOUND" = "false" ]; then
+    echo "[경고] Ceph 이(가) 설치되어 있지 않거나 탐지되지 않았습니다."
+    echo "일부 점검 항목이 N/A로 처리될 수 있습니다."
+    echo ""
+fi
+
+
 # CLD-Ceph-01: Keyring 파일 소유자 및 권한 확인
 check_CLD_Ceph_01() {
     local status="양호"

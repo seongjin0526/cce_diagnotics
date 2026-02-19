@@ -98,6 +98,67 @@ if [ ! -d "$HADOOP_CONF_DIR" ]; then
 fi
 
 
+# --- Pre-flight: Hadoop 설치 확인 및 경로 탐지 ---
+HADOOP_BIN=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    HADOOP_BIN=$(command -v hadoop 2>/dev/null)
+    local hdfs_bin
+    hdfs_bin=$(command -v hdfs 2>/dev/null)
+
+    # 2) 프로세스에서 hadoop/NameNode 탐지
+    if ps -ef 2>/dev/null | grep -qE '[h]adoop|[N]ameNode|[D]ataNode'; then
+        APP_FOUND="true"
+    fi
+
+    # 3) HADOOP_HOME 환경 변수 확인
+    if [ -n "$HADOOP_HOME" ] && [ -d "$HADOOP_HOME" ]; then
+        APP_FOUND="true"
+        if [ -z "$HADOOP_BIN" ] && [ -x "$HADOOP_HOME/bin/hadoop" ]; then
+            HADOOP_BIN="$HADOOP_HOME/bin/hadoop"
+        fi
+    fi
+
+    # 4) HADOOP_CONF_DIR 확인 및 탐색
+    if [ ! -d "$HADOOP_CONF_DIR" ]; then
+        for d in /etc/hadoop/conf /opt/hadoop*/etc/hadoop /usr/lib/hadoop/etc/hadoop /usr/local/hadoop/etc/hadoop; do
+            if [ -d "$d" ]; then
+                HADOOP_CONF_DIR="$d"
+                break
+            fi
+        done
+    fi
+
+    # 5) 패키지 매니저 확인
+    if [ -z "$HADOOP_BIN" ] && [ -z "$hdfs_bin" ] && [ "$APP_FOUND" = "false" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'hadoop' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'hadoop' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$HADOOP_BIN" ] || [ -n "$hdfs_bin" ] || [ -d "$HADOOP_CONF_DIR" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+
+###############################################################################
+# Pre-flight: 애플리케이션 설치 확인 및 경로 탐지
+###############################################################################
+detect_app
+
+if [ "$APP_FOUND" = "false" ]; then
+    echo "[경고] Hadoop 이(가) 설치되어 있지 않거나 탐지되지 않았습니다."
+    echo "일부 점검 항목이 N/A로 처리될 수 있습니다."
+    echo ""
+fi
+
+
 # CLD-Hadoop-01: 로컬 파일 시스템/HDFS 디렉토리 소유자 및 권한 설정
 check_CLD_Hadoop_01() {
     local status="양호"

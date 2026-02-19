@@ -121,6 +121,70 @@ run_mongo_query() {
 }
 
 
+# --- Pre-flight: MongoDB 설치 확인 및 경로 탐지 ---
+MONGO_BIN=""
+MONGOD_CONF=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    MONGO_BIN=$(command -v mongosh 2>/dev/null)
+    if [ -z "$MONGO_BIN" ]; then
+        MONGO_BIN=$(command -v mongo 2>/dev/null)
+    fi
+    local mongod_bin
+    mongod_bin=$(command -v mongod 2>/dev/null)
+
+    # 2) 프로세스에서 --config 추출
+    local mongod_proc
+    mongod_proc=$(ps -ef 2>/dev/null | grep '[m]ongod' | grep -v mongos | head -1)
+    if [ -n "$mongod_proc" ]; then
+        APP_FOUND="true"
+        local conf_from_proc
+        conf_from_proc=$(echo "$mongod_proc" | sed -n 's/.*--config[= ]\([^ ]*\).*/\1/p')
+        if [ -n "$conf_from_proc" ] && [ -f "$conf_from_proc" ]; then
+            MONGOD_CONF="$conf_from_proc"
+        fi
+    fi
+
+    # 3) 공통 설정 파일 경로 탐색
+    if [ -z "$MONGOD_CONF" ]; then
+        for f in /etc/mongod.conf /etc/mongodb.conf /usr/local/etc/mongod.conf; do
+            if [ -f "$f" ]; then
+                MONGOD_CONF="$f"
+                break
+            fi
+        done
+    fi
+
+    # 4) 패키지 매니저 확인
+    if [ -z "$MONGO_BIN" ] && [ -z "$mongod_bin" ] && [ "$APP_FOUND" = "false" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'mongodb\|mongod' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'mongodb\|mongod' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$MONGO_BIN" ] || [ -n "$mongod_bin" ] || [ -n "$MONGOD_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+
+###############################################################################
+# Pre-flight: 애플리케이션 설치 확인 및 경로 탐지
+###############################################################################
+detect_app
+
+if [ "$APP_FOUND" = "false" ]; then
+    echo "[경고] MongoDB 이(가) 설치되어 있지 않거나 탐지되지 않았습니다."
+    echo "일부 점검 항목이 N/A로 처리될 수 있습니다."
+    echo ""
+fi
+
+
 # CLD-MongoDB-01: 불필요한 데이터베이스 및 테이블 제거
 check_CLD_MongoDB_01() {
     local status="양호"

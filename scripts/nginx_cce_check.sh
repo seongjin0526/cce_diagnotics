@@ -100,6 +100,74 @@ get_nginx_conf() {
 }
 
 
+# --- Pre-flight: Nginx 설치 확인 및 경로 탐지 ---
+NGINX_BIN=""
+NGINX_CONF=""
+APP_FOUND="false"
+
+detect_app() {
+    # 1) command -v 로 바이너리 탐지
+    NGINX_BIN=$(command -v nginx 2>/dev/null)
+
+    # 2) 프로세스에서 탐지
+    if [ -z "$NGINX_BIN" ]; then
+        local nginx_proc
+        nginx_proc=$(ps -ef 2>/dev/null | grep '[n]ginx.*master' | head -1)
+        if [ -n "$nginx_proc" ]; then
+            NGINX_BIN=$(echo "$nginx_proc" | awk '{print $8}')
+            APP_FOUND="true"
+        fi
+    fi
+
+    # 3) nginx -t 로 conf 경로 추출
+    if [ -n "$NGINX_BIN" ]; then
+        local nginx_test
+        nginx_test=$("$NGINX_BIN" -t 2>&1)
+        local conf_from_test
+        conf_from_test=$(echo "$nginx_test" | sed -n 's/.*configuration file \(.*\) test.*/\1/p')
+        if [ -n "$conf_from_test" ] && [ -f "$conf_from_test" ]; then
+            NGINX_CONF="$conf_from_test"
+        fi
+    fi
+
+    # 4) 공통 설정 파일 경로 탐색
+    if [ -z "$NGINX_CONF" ]; then
+        for f in /etc/nginx/nginx.conf /usr/local/nginx/conf/nginx.conf /usr/local/etc/nginx/nginx.conf; do
+            if [ -f "$f" ]; then
+                NGINX_CONF="$f"
+                break
+            fi
+        done
+    fi
+
+    # 5) 패키지 매니저 확인
+    if [ -z "$NGINX_BIN" ] && [ -z "$NGINX_CONF" ]; then
+        if command -v dpkg &>/dev/null; then
+            dpkg -l 2>/dev/null | grep -qi 'nginx' && APP_FOUND="true"
+        elif command -v rpm &>/dev/null; then
+            rpm -qa 2>/dev/null | grep -qi 'nginx' && APP_FOUND="true"
+        fi
+    fi
+
+    # 판정
+    if [ -n "$NGINX_BIN" ] || [ -n "$NGINX_CONF" ]; then
+        APP_FOUND="true"
+    fi
+}
+
+
+###############################################################################
+# Pre-flight: 애플리케이션 설치 확인 및 경로 탐지
+###############################################################################
+detect_app
+
+if [ "$APP_FOUND" = "false" ]; then
+    echo "[경고] Nginx 이(가) 설치되어 있지 않거나 탐지되지 않았습니다."
+    echo "일부 점검 항목이 N/A로 처리될 수 있습니다."
+    echo ""
+fi
+
+
 # CLD-Nginx-01 / WEB-11: 웹 서비스 영역의 분리
 check_CLD_Nginx_01() {
     local status="양호"
