@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.pdf
+cce_check_result_*.json
+test_result.json
+test_new_result.json
+/tmp/
