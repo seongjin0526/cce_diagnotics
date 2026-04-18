@@ -9,13 +9,14 @@ CCE 취약점 항목 통합 → Excel 출력 스크립트
 import fitz
 import re
 import json
-import os
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 
-BASE_DIR = '/home/seongjin0526/cce_vuln_check'
-CLOUD_PDF = os.path.join(BASE_DIR, '클라우드 취약점 점검 가이드(2024).pdf')
-MAIN_PDF = os.path.join(BASE_DIR, '주요정보통신기반시설 기술적 취약점 분석·평가 방법 상세가이드.pdf')
+from code_scheme import make_cloud_control_code, to_preferred_code_text
+from project_paths import CLOUD_GUIDE_PDF, MAIN_GUIDE_PDF, MERGED_ITEMS_XLSX
+
+CLOUD_PDF = str(CLOUD_GUIDE_PDF)
+MAIN_PDF = str(MAIN_GUIDE_PDF)
 
 CLOUD_OFFSET = 5
 
@@ -371,7 +372,7 @@ def parse_main_chapter(doc, chapter_key):
             remediation_full += f"\n\n[상세 조치 사례]\n{clean_text(detail)}"
 
         items.append({
-            'code': code,
+            'code': to_preferred_code_text(code),
             'severity': severity,
             'name': item_name,
             'category': category_path,
@@ -455,7 +456,7 @@ def create_excel(all_data, output_path):
 
         # Cloud guide items
         for idx, item in enumerate(cloud_items, 1):
-            item_code = f"CLD-{app_name.replace('(', '').replace(')', '').replace(' ', '')}-{idx:02d}"
+            item_code = make_cloud_control_code(app_name, idx)
 
             cells = [
                 (app_name, center_alignment),
@@ -486,7 +487,7 @@ def create_excel(all_data, output_path):
                 (app_name, center_alignment),
                 ('주요기반시설', center_alignment),
                 (item.get('severity', ''), center_alignment),
-                (item.get('code', ''), center_alignment),
+                (to_preferred_code_text(item.get('code', '')), center_alignment),
                 (item.get('name', ''), cell_alignment),
                 (item.get('category', ''), cell_alignment),
                 (item.get('diagnosis', ''), cell_alignment),
@@ -624,8 +625,7 @@ def main():
                 all_data[app_name]['main'] = items
 
     # Generate Excel
-    output_path = os.path.join(BASE_DIR, '진단항목통합.xlsx')
-    create_excel(all_data, output_path)
+    create_excel(all_data, MERGED_ITEMS_XLSX)
 
 
 if __name__ == '__main__':

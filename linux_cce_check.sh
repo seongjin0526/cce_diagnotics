@@ -18,6 +18,29 @@ trap "rm -rf $TEMP_DIR" EXIT
 # --- JSON helper functions ---
 results=()
 
+normalize_trace_value() {
+    printf '%s' "$1" | tr '\t\r\n' '   ' | sed 's/  */ /g; s/^ //; s/ $//'
+}
+
+log_result_trace() {
+    local code="$1"
+    local status="$2"
+    local title="$3"
+    local command="$4"
+    local current_state="$5"
+    local detail="$6"
+    local command_text
+    local current_state_text
+    local detail_text
+    command_text=$(normalize_trace_value "$command")
+    current_state_text=$(normalize_trace_value "$current_state")
+    detail_text=$(normalize_trace_value "$detail")
+    printf '\n[TRACE] code=%s status=%s title=%s\n' "$code" "$status" "$title"
+    printf '[TRACE] command=%s\n' "${command_text:--}"
+    printf '[TRACE] current_state=%s\n' "${current_state_text:--}"
+    printf '[TRACE] detail=%s\n' "${detail_text:--}"
+}
+
 add_result() {
     local code="$1"
     local category="$2"
@@ -29,6 +52,9 @@ add_result() {
     local command="$8"       # 수행 명령어
     local current_state="$9" # 현재 상태 (명령어 실행 결과)
     local remediation="${10}" # 조치방법
+    local raw_detail="$detail"
+    local raw_command="$command"
+    local raw_current_state="$current_state"
 
     # Escape strings for JSON
     detail=$(echo "$detail" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/ /g' | tr '\n' ' ' | sed 's/  */ /g')
@@ -38,6 +64,7 @@ add_result() {
     remediation=$(echo "$remediation" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/ /g' | tr '\n' ' ' | sed 's/  */ /g')
 
     results+=("{\"code\":\"$code\",\"category\":\"$category\",\"title\":\"$title\",\"importance\":\"$importance\",\"status\":\"$status\",\"detail\":\"$detail\",\"source\":\"$source\",\"command\":\"$command\",\"current_state\":\"$current_state\",\"remediation\":\"$remediation\"}")
+    log_result_trace "$code" "$status" "$title" "$raw_command" "$raw_current_state" "$raw_detail"
 }
 
 # --- Utility functions ---
@@ -84,11 +111,61 @@ is_service_active() {
     fi
 }
 
+status_rank() {
+    case "$1" in
+        "취약") echo 3 ;;
+        "수동점검") echo 2 ;;
+        "양호") echo 1 ;;
+        *) echo 0 ;;
+    esac
+}
+
+merge_status() {
+    local current="$1"
+    local candidate="$2"
+
+    if [ "$(status_rank "$candidate")" -gt "$(status_rank "$current")" ]; then
+        echo "$candidate"
+    else
+        echo "$current"
+    fi
+}
+
+mail_sendmail_active() {
+    ps -ef 2>/dev/null | grep -v grep | grep -qE '[s]endmail'
+}
+
+mail_postfix_active() {
+    systemctl is-active postfix &>/dev/null || \
+    ps -ef 2>/dev/null | grep -v grep | grep -qE '[p]ostfix'
+}
+
+mail_exim_active() {
+    systemctl is-active exim &>/dev/null || \
+    systemctl is-active exim4 &>/dev/null || \
+    ps -ef 2>/dev/null | grep -v grep | grep -qE '[e]xim([0-9]|4)?'
+}
+
+last_permission_digit() {
+    local perm="$1"
+    printf '%s' "$perm" | sed 's/.*\(.\)$/\1/'
+}
+
+mail_exim_config() {
+    for f in /etc/exim/exim.conf /etc/exim4/exim4.conf; do
+        if [ -f "$f" ]; then
+            printf '%s\n' "$f"
+            return 0
+        fi
+    done
+    return 1
+}
+
 ###############################################################################
 # 1. 계정 관리
 ###############################################################################
 
-# U-01: root 계정 원격 접속 제한
+# ISMS-U-01: root 계정 원격 접속 제한
 check_U01() {
     local status="양호"
     local detail=""
@@ -142,10 +219,10 @@ check_U01() {
         cur_state+="; Telnet=inactive"
     fi
 
-    add_result "U-01" "계정 관리" "root 계정 원격 접속 제한" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-01" "계정 관리" "root 계정 원격 접속 제한" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-02: 비밀번호 관리정책 설정
+# ISMS-U-02: 비밀번호 관리정책 설정
 check_U02() {
     local status="양호"
     local detail=""
@@ -214,10 +291,10 @@ check_U02() {
         fi
     fi
 
-    add_result "U-02" "계정 관리" "비밀번호 관리정책 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-02" "계정 관리" "비밀번호 관리정책 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-03: 계정 잠금 임계값 설정
+# ISMS-U-03: 계정 잠금 임계값 설정
 check_U03() {
     local status="취약"
     local detail=""
@@ -258,10 +335,10 @@ check_U03() {
         cur_state="계정 잠금 임계값 미설정"
     fi
 
-    add_result "U-03" "계정 관리" "계정 잠금 임계값 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-03" "계정 관리" "계정 잠금 임계값 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-04: 비밀번호 파일 보호
+# ISMS-U-04: 비밀번호 파일 보호
 check_U04() {
     local status="양호"
     local detail=""
@@ -289,10 +366,10 @@ check_U04() {
         cur_state+="; 모든 계정 shadow 사용"
     fi
 
-    add_result "U-04" "계정 관리" "비밀번호 파일 보호" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-04" "계정 관리" "비밀번호 파일 보호" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-05: root 이외의 UID가 '0' 금지
+# ISMS-U-05: root 이외의 UID가 '0' 금지
 check_U05() {
     local status="양호"
     local detail=""
@@ -310,10 +387,10 @@ check_U05() {
         detail="root 외 UID=0 계정 없음. "
     fi
 
-    add_result "U-05" "계정 관리" "root 이외의 UID가 0 금지" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-05" "계정 관리" "root 이외의 UID가 0 금지" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-06: 사용자 계정 su 기능 제한
+# ISMS-U-06: 사용자 계정 su 기능 제한
 check_U06() {
     local status="취약"
     local detail=""
@@ -346,10 +423,10 @@ check_U06() {
         cur_state+="; su 권한=${su_perm}"
     fi
 
-    add_result "U-06" "계정 관리" "사용자 계정 su 기능 제한" "상" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-06" "계정 관리" "사용자 계정 su 기능 제한" "상" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-07: 불필요한 계정 제거
+# ISMS-U-07: 불필요한 계정 제거
 check_U07() {
     local status="수동점검"
     local detail=""
@@ -373,10 +450,10 @@ check_U07() {
         detail+="불필요한 기본계정 미발견(수동 확인 필요). "
     fi
 
-    add_result "U-07" "계정 관리" "불필요한 계정 제거" "하" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-07" "계정 관리" "불필요한 계정 제거" "하" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-08: 관리자 그룹에 최소한의 계정 포함
+# ISMS-U-08: 관리자 그룹에 최소한의 계정 포함
 check_U08() {
     local status="수동점검"
     local detail=""
@@ -393,10 +470,10 @@ check_U08() {
         status="양호"
     fi
 
-    add_result "U-08" "계정 관리" "관리자 그룹에 최소한의 계정 포함" "중" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-08" "계정 관리" "관리자 그룹에 최소한의 계정 포함" "중" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-09: 계정이 존재하지 않는 GID 금지
+# ISMS-U-09: 계정이 존재하지 않는 GID 금지
 check_U09() {
     local status="수동점검"
     local detail=""
@@ -427,10 +504,10 @@ check_U09() {
         status="양호"
     fi
 
-    add_result "U-09" "계정 관리" "계정이 존재하지 않는 GID 금지" "하" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-09" "계정 관리" "계정이 존재하지 않는 GID 금지" "하" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-10: 동일한 UID 금지
+# ISMS-U-10: 동일한 UID 금지
 check_U10() {
     local status="양호"
     local detail=""
@@ -455,10 +532,10 @@ check_U10() {
         cur_state="중복 UID 없음"
     fi
 
-    add_result "U-10" "계정 관리" "동일한 UID 금지" "중" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-10" "계정 관리" "동일한 UID 금지" "중" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-11: 사용자 Shell 점검
+# ISMS-U-11: 사용자 Shell 점검
 check_U11() {
     local status="양호"
     local detail=""
@@ -478,10 +555,10 @@ check_U11() {
         cur_state="로그인 불필요 계정 쉘 설정 적절"
     fi
 
-    add_result "U-11" "계정 관리" "사용자 Shell 점검" "하" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-11" "계정 관리" "사용자 Shell 점검" "하" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-12: 세션 종료 시간 설정
+# ISMS-U-12: 세션 종료 시간 설정
 check_U12() {
     local status="취약"
     local detail=""
@@ -511,10 +588,10 @@ check_U12() {
         cur_state="TMOUT 미설정"
     fi
 
-    add_result "U-12" "계정 관리" "세션 종료 시간 설정" "하" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-12" "계정 관리" "세션 종료 시간 설정" "하" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-13: 안전한 비밀번호 암호화 알고리즘 사용
+# ISMS-U-13: 안전한 비밀번호 암호화 알고리즘 사용
 check_U13() {
     local status="양호"
     local detail=""
@@ -542,14 +619,14 @@ check_U13() {
         status="수동점검"
     fi
 
-    add_result "U-13" "계정 관리" "안전한 비밀번호 암호화 알고리즘 사용" "중" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-13" "계정 관리" "안전한 비밀번호 암호화 알고리즘 사용" "중" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
 ###############################################################################
 # 2. 파일 및 디렉토리 관리
 ###############################################################################
 
-# U-14: root 홈, 패스 디렉터리 권한 및 패스 설정
+# ISMS-U-14: root 홈, 패스 디렉터리 권한 및 패스 설정
 check_U14() {
     local status="양호"
     local detail=""
@@ -571,10 +648,10 @@ check_U14() {
         detail="PATH에 '.' 미포함. "
     fi
 
-    add_result "U-14" "파일 및 디렉터리 관리" "root 홈, 패스 디렉터리 권한 및 패스 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-14" "파일 및 디렉터리 관리" "root 홈, 패스 디렉터리 권한 및 패스 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-15: 파일 및 디렉터리 소유자 설정
+# ISMS-U-15: 파일 및 디렉터리 소유자 설정
 check_U15() {
     local status="양호"
     local detail=""
@@ -596,10 +673,10 @@ check_U15() {
         cur_state="소유자 없는 파일 없음"
     fi
 
-    add_result "U-15" "파일 및 디렉터리 관리" "파일 및 디렉터리 소유자 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-15" "파일 및 디렉터리 관리" "파일 및 디렉터리 소유자 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-16: /etc/passwd 파일 소유자 및 권한 설정
+# ISMS-U-16: /etc/passwd 파일 소유자 및 권한 설정
 check_U16() {
     local result
     result=$(check_file_owner_perm "/etc/passwd" "root" 644)
@@ -610,10 +687,10 @@ check_U16() {
     local cur_state
     cur_state=$(ls -l /etc/passwd 2>/dev/null | awk '{print $1, $3, $4, $9}')
     local remediation="chown root /etc/passwd && chmod 644 /etc/passwd"
-    add_result "U-16" "파일 및 디렉터리 관리" "/etc/passwd 파일 소유자 및 권한 설정" "상" "$status" "$result" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-16" "파일 및 디렉터리 관리" "/etc/passwd 파일 소유자 및 권한 설정" "상" "$status" "$result" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-17: 시스템 시작 스크립트 권한 설정
+# ISMS-U-17: 시스템 시작 스크립트 권한 설정
 check_U17() {
     local status="양호"
     local detail=""
@@ -644,10 +721,10 @@ check_U17() {
         cur_state="시작 스크립트 권한 적절"
     fi
 
-    add_result "U-17" "파일 및 디렉터리 관리" "시스템 시작 스크립트 권한 설정" "상" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-17" "파일 및 디렉터리 관리" "시스템 시작 스크립트 권한 설정" "상" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-18: /etc/shadow 파일 소유자 및 권한 설정
+# ISMS-U-18: /etc/shadow 파일 소유자 및 권한 설정
 check_U18() {
     local result
     result=$(check_file_owner_perm "/etc/shadow" "root" 400)
@@ -658,10 +735,10 @@ check_U18() {
     local cur_state
     cur_state=$(ls -l /etc/shadow 2>/dev/null | awk '{print $1, $3, $4, $9}')
     local remediation="chown root /etc/shadow && chmod 400 /etc/shadow"
-    add_result "U-18" "파일 및 디렉터리 관리" "/etc/shadow 파일 소유자 및 권한 설정" "상" "$status" "$result" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-18" "파일 및 디렉터리 관리" "/etc/shadow 파일 소유자 및 권한 설정" "상" "$status" "$result" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-19: /etc/hosts 파일 소유자 및 권한 설정
+# ISMS-U-19: /etc/hosts 파일 소유자 및 권한 설정
 check_U19() {
     local result
     result=$(check_file_owner_perm "/etc/hosts" "root" 644)
@@ -672,10 +749,10 @@ check_U19() {
     local cur_state
     cur_state=$(ls -l /etc/hosts 2>/dev/null | awk '{print $1, $3, $4, $9}')
     local remediation="chown root /etc/hosts && chmod 644 /etc/hosts"
-    add_result "U-19" "파일 및 디렉터리 관리" "/etc/hosts 파일 소유자 및 권한 설정" "상" "$status" "$result" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-19" "파일 및 디렉터리 관리" "/etc/hosts 파일 소유자 및 권한 설정" "상" "$status" "$result" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-20: /etc/(x)inetd.conf 파일 소유자 및 권한 설정
+# ISMS-U-20: /etc/(x)inetd.conf 파일 소유자 및 권한 설정
 check_U20() {
     local status="N/A"
     local detail=""
@@ -703,10 +780,10 @@ check_U20() {
         cur_state="(x)inetd.conf 파일 없음"
     fi
 
-    add_result "U-20" "파일 및 디렉터리 관리" "/etc/(x)inetd.conf 파일 소유자 및 권한 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-20" "파일 및 디렉터리 관리" "/etc/(x)inetd.conf 파일 소유자 및 권한 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-21: /etc/(r)syslog.conf 파일 소유자 및 권한 설정
+# ISMS-U-21: /etc/(r)syslog.conf 파일 소유자 및 권한 설정
 check_U21() {
     local status="N/A"
     local detail=""
@@ -734,10 +811,10 @@ check_U21() {
         cur_state="(r)syslog.conf 파일 없음"
     fi
 
-    add_result "U-21" "파일 및 디렉터리 관리" "/etc/(r)syslog.conf 파일 소유자 및 권한 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-21" "파일 및 디렉터리 관리" "/etc/(r)syslog.conf 파일 소유자 및 권한 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-22: /etc/services 파일 소유자 및 권한 설정
+# ISMS-U-22: /etc/services 파일 소유자 및 권한 설정
 check_U22() {
     local result
     result=$(check_file_owner_perm "/etc/services" "root" 644)
@@ -748,10 +825,10 @@ check_U22() {
     local cur_state
     cur_state=$(ls -l /etc/services 2>/dev/null | awk '{print $1, $3, $4, $9}')
     local remediation="chown root /etc/services && chmod 644 /etc/services"
-    add_result "U-22" "파일 및 디렉터리 관리" "/etc/services 파일 소유자 및 권한 설정" "상" "$status" "$result" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-22" "파일 및 디렉터리 관리" "/etc/services 파일 소유자 및 권한 설정" "상" "$status" "$result" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-23: SUID, SGID, Sticky bit 설정 파일 점검
+# ISMS-U-23: SUID, SGID, Sticky bit 설정 파일 점검
 check_U23() {
     local status="수동점검"
     local detail=""
@@ -780,10 +857,10 @@ check_U23() {
         cur_state+="; 주의 필요: $found_dangerous"
     fi
 
-    add_result "U-23" "파일 및 디렉터리 관리" "SUID, SGID, Sticky bit 설정 파일 점검" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-23" "파일 및 디렉터리 관리" "SUID, SGID, Sticky bit 설정 파일 점검" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-24: 사용자, 시스템 환경변수 파일 소유자 및 권한 설정
+# ISMS-U-24: 사용자, 시스템 환경변수 파일 소유자 및 권한 설정
 check_U24() {
     local status="양호"
     local detail=""
@@ -823,10 +900,10 @@ check_U24() {
         cur_state="환경변수 파일 소유자/권한 적절"
     fi
 
-    add_result "U-24" "파일 및 디렉터리 관리" "사용자, 시스템 환경변수 파일 소유자 및 권한 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-24" "파일 및 디렉터리 관리" "사용자, 시스템 환경변수 파일 소유자 및 권한 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-25: world writable 파일 점검
+# ISMS-U-25: world writable 파일 점검
 check_U25() {
     local status="수동점검"
     local detail=""
@@ -849,10 +926,10 @@ check_U25() {
         status="양호"
     fi
 
-    add_result "U-25" "파일 및 디렉터리 관리" "world writable 파일 점검" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-25" "파일 및 디렉터리 관리" "world writable 파일 점검" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-26: /dev에 존재하지 않는 device 파일 점검
+# ISMS-U-26: /dev에 존재하지 않는 device 파일 점검
 check_U26() {
     local status="양호"
     local detail=""
@@ -874,10 +951,10 @@ check_U26() {
         cur_state="/dev 내 비정상 파일 없음"
     fi
 
-    add_result "U-26" "파일 및 디렉터리 관리" "/dev에 존재하지 않는 device 파일 점검" "상" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-26" "파일 및 디렉터리 관리" "/dev에 존재하지 않는 device 파일 점검" "상" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-27: $HOME/.rhosts, hosts.equiv 사용 금지
+# ISMS-U-27: $HOME/.rhosts, hosts.equiv 사용 금지
 check_U27() {
     local status="양호"
     local detail=""
@@ -920,10 +997,10 @@ check_U27() {
         cur_state+=".rhosts: $rhosts_found"
     fi
 
-    add_result "U-27" "파일 및 디렉터리 관리" "\$HOME/.rhosts, hosts.equiv 사용 금지" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-27" "파일 및 디렉터리 관리" "\$HOME/.rhosts, hosts.equiv 사용 금지" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-28: 접속 IP 및 포트 제한
+# ISMS-U-28: 접속 IP 및 포트 제한
 check_U28() {
     local status="취약"
     local detail=""
@@ -969,10 +1046,10 @@ check_U28() {
         cur_state+="접근제어 미설정"
     fi
 
-    add_result "U-28" "파일 및 디렉터리 관리" "접속 IP 및 포트 제한" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-28" "파일 및 디렉터리 관리" "접속 IP 및 포트 제한" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-29: hosts.lpd 파일 소유자 및 권한 설정
+# ISMS-U-29: hosts.lpd 파일 소유자 및 권한 설정
 check_U29() {
     local cmd="ls -l /etc/hosts.lpd"
     local remediation="chown root /etc/hosts.lpd && chmod 600 /etc/hosts.lpd"
@@ -983,13 +1060,13 @@ check_U29() {
         if [[ "$result" == VULN* ]]; then status="취약"; fi
         local cur_state
         cur_state=$(ls -l /etc/hosts.lpd 2>/dev/null | awk '{print $1, $3, $4, $9}')
-        add_result "U-29" "파일 및 디렉터리 관리" "hosts.lpd 파일 소유자 및 권한 설정" "하" "$status" "$result" "기반시설" "$cmd" "$cur_state" "$remediation"
+        add_result "ISMS-U-29" "파일 및 디렉터리 관리" "hosts.lpd 파일 소유자 및 권한 설정" "하" "$status" "$result" "기반시설" "$cmd" "$cur_state" "$remediation"
     else
-        add_result "U-29" "파일 및 디렉터리 관리" "hosts.lpd 파일 소유자 및 권한 설정" "하" "N/A" "hosts.lpd 파일 없음" "기반시설" "$cmd" "hosts.lpd 파일 없음" "$remediation"
+        add_result "ISMS-U-29" "파일 및 디렉터리 관리" "hosts.lpd 파일 소유자 및 권한 설정" "하" "N/A" "hosts.lpd 파일 없음" "기반시설" "$cmd" "hosts.lpd 파일 없음" "$remediation"
     fi
 }
 
-# U-30: UMASK 설정 관리
+# ISMS-U-30: UMASK 설정 관리
 check_U30() {
     local status="취약"
     local detail=""
@@ -1019,10 +1096,10 @@ check_U30() {
         cur_state="UMASK 미설정"
     fi
 
-    add_result "U-30" "파일 및 디렉터리 관리" "UMASK 설정 관리" "중" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-30" "파일 및 디렉터리 관리" "UMASK 설정 관리" "중" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-31: 홈 디렉토리 소유자 및 권한 설정
+# ISMS-U-31: 홈 디렉토리 소유자 및 권한 설정
 check_U31() {
     local status="양호"
     local detail=""
@@ -1055,10 +1132,10 @@ check_U31() {
         cur_state="홈 디렉토리 소유자/권한 적절"
     fi
 
-    add_result "U-31" "파일 및 디렉터리 관리" "홈 디렉토리 소유자 및 권한 설정" "중" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-31" "파일 및 디렉터리 관리" "홈 디렉토리 소유자 및 권한 설정" "중" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-32: 홈 디렉토리로 지정한 디렉토리의 존재 관리
+# ISMS-U-32: 홈 디렉토리로 지정한 디렉토리의 존재 관리
 check_U32() {
     local status="양호"
     local detail=""
@@ -1084,19 +1161,19 @@ check_U32() {
         cur_state="모든 활성 계정의 홈 디렉토리 존재"
     fi
 
-    add_result "U-32" "파일 및 디렉터리 관리" "홈 디렉토리로 지정한 디렉토리의 존재 관리" "중" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-32" "파일 및 디렉터리 관리" "홈 디렉토리로 지정한 디렉토리의 존재 관리" "중" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-33: 숨겨진 파일 및 디렉토리 검색 및 제거
+# ISMS-U-33: 숨겨진 파일 및 디렉토리 검색 및 제거
 check_U33() {
-    add_result "U-33" "파일 및 디렉터리 관리" "숨겨진 파일 및 디렉토리 검색 및 제거" "하" "수동점검" "숨겨진 파일 점검은 수동 확인 필요 (find / -name '.*' -type f)" "기반시설" "find / -name '.*' -type f" "수동 확인 필요" "불필요한 숨김 파일 및 디렉토리 삭제. find / -name '.*' -type f 명령으로 확인 후 조치."
+    add_result "ISMS-U-33" "파일 및 디렉터리 관리" "숨겨진 파일 및 디렉토리 검색 및 제거" "하" "수동점검" "숨겨진 파일 점검은 수동 확인 필요 (find / -name '.*' -type f)" "기반시설" "find / -name '.*' -type f" "수동 확인 필요" "불필요한 숨김 파일 및 디렉토리 삭제. find / -name '.*' -type f 명령으로 확인 후 조치."
 }
 
 ###############################################################################
 # 3. 서비스 관리
 ###############################################################################
 
-# U-34: Finger 서비스 비활성화
+# ISMS-U-34: Finger 서비스 비활성화
 check_U34() {
     local status="양호"
     local detail=""
@@ -1126,10 +1203,10 @@ check_U34() {
         fi
     fi
 
-    add_result "U-34" "서비스 관리" "Finger 서비스 비활성화" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-34" "서비스 관리" "Finger 서비스 비활성화" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-35: 공유 서비스에 대한 익명 접근 제한 설정
+# ISMS-U-35: 공유 서비스에 대한 익명 접근 제한 설정
 check_U35() {
     local status="양호"
     local detail=""
@@ -1174,10 +1251,10 @@ check_U35() {
         cur_state="공유 서비스 익명 접근 미발견"
     fi
 
-    add_result "U-35" "서비스 관리" "공유 서비스에 대한 익명 접근 제한 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-35" "서비스 관리" "공유 서비스에 대한 익명 접근 제한 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-36: r 계열 서비스 비활성화
+# ISMS-U-36: r 계열 서비스 비활성화
 check_U36() {
     local status="양호"
     local detail=""
@@ -1207,10 +1284,10 @@ check_U36() {
         cur_state="r 계열 서비스 비활성화"
     fi
 
-    add_result "U-36" "서비스 관리" "r 계열 서비스 비활성화" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-36" "서비스 관리" "r 계열 서비스 비활성화" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-37: crontab 설정파일 권한 설정
+# ISMS-U-37: crontab 설정파일 권한 설정
 check_U37() {
     local status="양호"
     local detail=""
@@ -1244,10 +1321,10 @@ check_U37() {
     done
 
     cur_state=$(echo "$detail" | sed 's/\. *$//')
-    add_result "U-37" "서비스 관리" "crontab 설정파일 권한 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-37" "서비스 관리" "crontab 설정파일 권한 설정" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-38: DoS 공격에 취약한 서비스 비활성화
+# ISMS-U-38: DoS 공격에 취약한 서비스 비활성화
 check_U38() {
     local status="양호"
     local detail=""
@@ -1279,10 +1356,10 @@ check_U38() {
         cur_state="DoS 취약 서비스 비활성화"
     fi
 
-    add_result "U-38" "서비스 관리" "DoS 공격에 취약한 서비스 비활성화" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-38" "서비스 관리" "DoS 공격에 취약한 서비스 비활성화" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-39: 불필요한 NFS 서비스 비활성화
+# ISMS-U-39: 불필요한 NFS 서비스 비활성화
 check_U39() {
     local status="양호"
     local detail=""
@@ -1303,10 +1380,10 @@ check_U39() {
         cur_state="NFS 비활성화"
     fi
 
-    add_result "U-39" "서비스 관리" "불필요한 NFS 서비스 비활성화" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-39" "서비스 관리" "불필요한 NFS 서비스 비활성화" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-40: NFS 접근 통제
+# ISMS-U-40: NFS 접근 통제
 check_U40() {
     local status="N/A"
     local detail=""
@@ -1336,10 +1413,10 @@ check_U40() {
         detail="NFS 서비스 미사용. "
     fi
 
-    add_result "U-40" "서비스 관리" "NFS 접근 통제" "상" "$status" "$detail" "공통" "cat /etc/exports; systemctl is-active nfs-server" "$detail" "/etc/exports에서 everyone(*) 공유 제거, 특정 호스트/IP만 허용 설정."
+    add_result "ISMS-U-40" "서비스 관리" "NFS 접근 통제" "상" "$status" "$detail" "공통" "cat /etc/exports; systemctl is-active nfs-server" "$detail" "/etc/exports에서 everyone(*) 공유 제거, 특정 호스트/IP만 허용 설정."
 }
 
-# U-41: 불필요한 automountd 제거
+# ISMS-U-41: 불필요한 automountd 제거
 check_U41() {
     local status="양호"
     local detail=""
@@ -1360,10 +1437,10 @@ check_U41() {
         cur_state="automountd 비활성화"
     fi
 
-    add_result "U-41" "서비스 관리" "불필요한 automountd 제거" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-41" "서비스 관리" "불필요한 automountd 제거" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-42: 불필요한 RPC 서비스 비활성화
+# ISMS-U-42: 불필요한 RPC 서비스 비활성화
 check_U42() {
     local status="양호"
     local detail=""
@@ -1395,10 +1472,10 @@ check_U42() {
         detail="불필요한 RPC 서비스 비활성화. "
     fi
 
-    add_result "U-42" "서비스 관리" "불필요한 RPC 서비스 비활성화" "상" "$status" "$detail" "공통" "ls /etc/xinetd.d/rstat* /etc/xinetd.d/ruser* /etc/xinetd.d/rwall* /etc/xinetd.d/rquota* /etc/xinetd.d/spray*; rpcinfo -p" "$detail" "불필요한 RPC 서비스(rstatd, rusersd, rwalld 등) xinetd에서 disable = yes 설정."
+    add_result "ISMS-U-42" "서비스 관리" "불필요한 RPC 서비스 비활성화" "상" "$status" "$detail" "공통" "ls /etc/xinetd.d/rstat* /etc/xinetd.d/ruser* /etc/xinetd.d/rwall* /etc/xinetd.d/rquota* /etc/xinetd.d/spray*; rpcinfo -p" "$detail" "불필요한 RPC 서비스(rstatd, rusersd, rwalld 등) xinetd에서 disable = yes 설정."
 }
 
-# U-43: NIS, NIS+ 점검
+# ISMS-U-43: NIS, NIS+ 점검
 check_U43() {
     local status="양호"
     local detail=""
@@ -1412,10 +1489,10 @@ check_U43() {
         detail="NIS 서비스 비활성화. "
     fi
 
-    add_result "U-43" "서비스 관리" "NIS, NIS+ 점검" "상" "$status" "$detail" "공통" "ps -ef | grep -E 'ypserv|ypbind'" "$detail" "NIS 관련 서비스(ypserv, ypbind 등) 중지 및 비활성화."
+    add_result "ISMS-U-43" "서비스 관리" "NIS, NIS+ 점검" "상" "$status" "$detail" "공통" "ps -ef | grep -E 'ypserv|ypbind'" "$detail" "NIS 관련 서비스(ypserv, ypbind 등) 중지 및 비활성화."
 }
 
-# U-44: tftp, talk 서비스 비활성화
+# ISMS-U-44: tftp, talk 서비스 비활성화
 check_U44() {
     local status="양호"
     local detail=""
@@ -1439,127 +1516,277 @@ check_U44() {
         detail="tftp, talk 서비스 비활성화. "
     fi
 
-    add_result "U-44" "서비스 관리" "tftp, talk 서비스 비활성화" "상" "$status" "$detail" "공통" "ls /etc/xinetd.d/tftp /etc/xinetd.d/talk /etc/xinetd.d/ntalk; ps -ef | grep -E 'tftpd|talkd|ntalkd'" "$detail" "tftp, talk, ntalk 서비스 xinetd에서 disable = yes 설정 또는 삭제."
+    add_result "ISMS-U-44" "서비스 관리" "tftp, talk 서비스 비활성화" "상" "$status" "$detail" "공통" "ls /etc/xinetd.d/tftp /etc/xinetd.d/talk /etc/xinetd.d/ntalk; ps -ef | grep -E 'tftpd|talkd|ntalkd'" "$detail" "tftp, talk, ntalk 서비스 xinetd에서 disable = yes 설정 또는 삭제."
 }
 
-# U-45: 메일 서비스 버전 점검
+# ISMS-U-45: 메일 서비스 버전 점검
 check_U45() {
     local status="N/A"
     local detail=""
+    local cur_state=""
+    local cmd="sendmail -d0.1 -bt < /dev/null; postconf mail_version; exim -bV"
+    local remediation="메일 서비스(Sendmail/Postfix/Exim) 최신 보안 패치 적용. 미사용 시 서비스 비활성화."
 
-    if ps -ef 2>/dev/null | grep -v grep | grep -q sendmail; then
+    if mail_sendmail_active; then
         local ver
-        ver=$(cat /etc/mail/sendmail.cf 2>/dev/null | grep "DZ" | head -1)
-        detail="Sendmail 실행 중. 버전: ${ver:-확인불가}. "
-        status="수동점검"
+        ver=$(sendmail -d0.1 -bt < /dev/null 2>&1 | grep -m1 -E 'Version|Sendmail' | head -1)
+        detail+="Sendmail 실행 중. 버전: ${ver:-확인불가}. "
+        cur_state="Sendmail=${ver:-확인불가}"
+        status=$(merge_status "$status" "수동점검")
     fi
 
-    if systemctl is-active postfix &>/dev/null || ps -ef 2>/dev/null | grep -v grep | grep -q "postfix"; then
+    if mail_postfix_active; then
         local ver
         ver=$(postconf mail_version 2>/dev/null)
         detail+="Postfix 실행 중. ${ver:-버전 확인불가}. "
-        status="수동점검"
+        cur_state="${cur_state}; Postfix=${ver:-확인불가}"
+        status=$(merge_status "$status" "수동점검")
     fi
+
+    if mail_exim_active; then
+        local ver
+        ver=$(exim -bV 2>/dev/null | head -1)
+        detail+="Exim 실행 중. ${ver:-버전 확인불가}. "
+        cur_state="${cur_state}; Exim=${ver:-확인불가}"
+        status=$(merge_status "$status" "수동점검")
+    fi
+
+    cur_state=$(printf '%s' "$cur_state" | sed 's/^;[[:space:]]*//')
 
     if [ "$status" = "N/A" ]; then
         detail="메일 서비스 미사용. "
+        cur_state="메일 서비스 미사용"
     fi
 
-    add_result "U-45" "서비스 관리" "메일 서비스 버전 점검" "상" "$status" "$detail" "공통" "ps -ef | grep -E 'sendmail|postfix'" "$detail" "메일 서비스(Sendmail/Postfix) 최신 보안 패치 적용. 미사용 시 서비스 비활성화."
+    add_result "ISMS-U-45" "서비스 관리" "메일 서비스 버전 점검" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-46: 일반 사용자의 메일 서비스 실행 방지
+# ISMS-U-46: 일반 사용자의 메일 서비스 실행 방지
 check_U46() {
     local status="N/A"
     local detail=""
+    local cur_state=""
+    local cmd="grep PrivacyOptions /etc/mail/sendmail.cf; stat -c '%a' /usr/sbin/postsuper; stat -c '%a' /usr/sbin/exiqgrep"
+    local remediation="Sendmail: /etc/mail/sendmail.cf에 PrivacyOptions=restrictqrun 설정. Postfix: /usr/sbin/postsuper의 기타 사용자 실행 권한 제거. Exim: /usr/sbin/exiqgrep의 기타 사용자 실행 권한 제거."
 
-    if ps -ef 2>/dev/null | grep -v grep | grep -q sendmail; then
+    if mail_sendmail_active; then
         local priv_opts
         priv_opts=$(grep "PrivacyOptions" /etc/mail/sendmail.cf 2>/dev/null | grep -v "^#")
         if echo "$priv_opts" | grep -qi "restrictqrun"; then
-            status="양호"
-            detail="Sendmail PrivacyOptions에 restrictqrun 설정. "
+            detail+="Sendmail PrivacyOptions에 restrictqrun 설정. "
+            cur_state="Sendmail=${priv_opts:-미설정}"
+            status=$(merge_status "$status" "양호")
         else
-            status="취약"
-            detail="Sendmail PrivacyOptions에 restrictqrun 미설정. "
+            detail+="Sendmail PrivacyOptions에 restrictqrun 미설정. "
+            cur_state="Sendmail=${priv_opts:-미설정}"
+            status=$(merge_status "$status" "취약")
         fi
-    elif systemctl is-active postfix &>/dev/null; then
-        local postfix_perm
-        postfix_perm=$(stat -c '%a' /usr/sbin/postfix 2>/dev/null)
-        if [ -n "$postfix_perm" ] && [ "$postfix_perm" -le 750 ] 2>/dev/null; then
-            status="양호"
-            detail="postfix 실행 권한: $postfix_perm. "
-        else
-            status="취약"
-            detail="postfix 실행 권한: ${postfix_perm:-확인불가}. "
-        fi
-    else
-        detail="메일 서비스 미사용. "
     fi
 
-    add_result "U-46" "서비스 관리" "일반 사용자의 메일 서비스 실행 방지" "상" "$status" "$detail" "공통" "grep PrivacyOptions /etc/mail/sendmail.cf; stat -c '%a' /usr/sbin/postfix" "$detail" "Sendmail: /etc/mail/sendmail.cf에 O PrivacyOptions=restrictqrun 추가. Postfix: 실행 권한 750 이하 설정."
+    if mail_postfix_active; then
+        local postfix_perm
+        local postfix_path
+        local postfix_other
+        postfix_path=$(command -v postsuper 2>/dev/null || printf '%s' /usr/sbin/postsuper)
+        postfix_perm=$(stat -c '%a' "$postfix_path" 2>/dev/null)
+        postfix_other=$(last_permission_digit "$postfix_perm")
+        if [ -n "$postfix_perm" ] && ! printf '%s' "$postfix_other" | grep -q '[1357]'; then
+            detail+="Postfix postsuper 실행 권한 적절($postfix_perm). "
+            cur_state="${cur_state}; Postfix=$postfix_path:$postfix_perm"
+            status=$(merge_status "$status" "양호")
+        else
+            detail+="Postfix postsuper 실행 권한 부적절(${postfix_perm:-확인불가}). "
+            cur_state="${cur_state}; Postfix=$postfix_path:${postfix_perm:-확인불가}"
+            status=$(merge_status "$status" "취약")
+        fi
+    fi
+
+    if mail_exim_active; then
+        local exim_perm
+        local exim_path
+        local exim_other
+        exim_path=$(command -v exiqgrep 2>/dev/null || printf '%s' /usr/sbin/exiqgrep)
+        exim_perm=$(stat -c '%a' "$exim_path" 2>/dev/null)
+        exim_other=$(last_permission_digit "$exim_perm")
+        if [ -n "$exim_perm" ] && ! printf '%s' "$exim_other" | grep -q '[1357]'; then
+            detail+="Exim exiqgrep 실행 권한 적절($exim_perm). "
+            cur_state="${cur_state}; Exim=$exim_path:$exim_perm"
+            status=$(merge_status "$status" "양호")
+        else
+            detail+="Exim exiqgrep 실행 권한 부적절(${exim_perm:-확인불가}). "
+            cur_state="${cur_state}; Exim=$exim_path:${exim_perm:-확인불가}"
+            status=$(merge_status "$status" "취약")
+        fi
+    fi
+
+    cur_state=$(printf '%s' "$cur_state" | sed 's/^;[[:space:]]*//')
+
+    if [ "$status" = "N/A" ]; then
+        detail="메일 서비스 미사용. "
+        cur_state="메일 서비스 미사용"
+    fi
+
+    add_result "ISMS-U-46" "서비스 관리" "일반 사용자의 메일 서비스 실행 방지" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-47: 스팸 메일 릴레이 제한
+# ISMS-U-47: 스팸 메일 릴레이 제한
 check_U47() {
     local status="N/A"
     local detail=""
+    local cur_state=""
+    local cmd="grep -E 'promiscuous_relay|Relaying denied' /etc/mail/sendmail.mc /etc/mail/sendmail.cf; postconf mynetworks; grep -E 'relay_from_hosts|accept hosts' /etc/exim/exim.conf /etc/exim4/exim4.conf"
+    local remediation="Sendmail: promiscuous_relay 제거 및 access 정책 적용. Postfix: mynetworks를 내부 허용망으로 제한. Exim: relay_from_hosts 또는 accept hosts를 허용된 네트워크로만 제한."
 
-    if ps -ef 2>/dev/null | grep -v grep | grep -q sendmail; then
-        local relay
-        relay=$(grep 'Relaying denied' /etc/mail/sendmail.cf 2>/dev/null | grep -v "^#")
-        if [ -n "$relay" ]; then
-            status="양호"
-            detail="Sendmail 릴레이 제한 설정됨. "
+    if mail_sendmail_active; then
+        local relay_denied
+        local promiscuous
+        local access_file
+        relay_denied=$(grep 'Relaying denied' /etc/mail/sendmail.cf 2>/dev/null | grep -v "^#")
+        promiscuous=$(grep -i 'promiscuous_relay' /etc/mail/sendmail.mc 2>/dev/null | grep -v "^#")
+        access_file=""
+        for access_candidate in /etc/mail/access /etc/mail/access.db; do
+            if [ -f "$access_candidate" ]; then
+                access_file="$access_candidate"
+                break
+            fi
+        done
+        if [ -n "$promiscuous" ]; then
+            detail+="Sendmail promiscuous_relay 설정 존재. "
+            cur_state="Sendmail=promiscuous_relay"
+            status=$(merge_status "$status" "취약")
+        elif [ -n "$relay_denied" ] || [ -n "$access_file" ]; then
+            detail+="Sendmail 릴레이 제한 설정 확인. "
+            cur_state="Sendmail=${relay_denied:-$access_file}"
+            status=$(merge_status "$status" "양호")
         else
-            status="취약"
-            detail="Sendmail 릴레이 제한 미설정. "
+            detail+="Sendmail 릴레이 제한 설정 확인 필요. "
+            cur_state="Sendmail=명시 설정 확인불가"
+            status=$(merge_status "$status" "수동점검")
         fi
-    elif systemctl is-active postfix &>/dev/null; then
-        local mynetworks
-        mynetworks=$(postconf mynetworks 2>/dev/null)
-        detail+="Postfix: ${mynetworks:-확인불가}. "
-        status="수동점검"
-    else
-        detail="메일 서비스 미사용. "
     fi
 
-    add_result "U-47" "서비스 관리" "스팸 메일 릴레이 제한" "상" "$status" "$detail" "공통" "grep 'Relaying denied' /etc/mail/sendmail.cf; postconf mynetworks" "$detail" "Sendmail: 릴레이 제한 설정. Postfix: mynetworks를 내부 네트워크로 제한."
+    if mail_postfix_active; then
+        local mynetworks
+        mynetworks=$(postconf -h mynetworks 2>/dev/null)
+        if [ -z "$mynetworks" ]; then
+            detail+="Postfix mynetworks 미설정. "
+            cur_state="${cur_state}; Postfix=미설정"
+            status=$(merge_status "$status" "취약")
+        elif printf '%s' "$mynetworks" | grep -Eq '0\.0\.0\.0/0|/0|all'; then
+            detail+="Postfix mynetworks 과다 허용($mynetworks). "
+            cur_state="${cur_state}; Postfix=$mynetworks"
+            status=$(merge_status "$status" "취약")
+        else
+            detail+="Postfix mynetworks 제한 설정($mynetworks). "
+            cur_state="${cur_state}; Postfix=$mynetworks"
+            status=$(merge_status "$status" "양호")
+        fi
+    fi
+
+    if mail_exim_active; then
+        local exim_conf
+        local relay_hosts
+        local accept_hosts
+        exim_conf=$(mail_exim_config)
+        relay_hosts=$(grep -E 'relay_from_hosts' "$exim_conf" 2>/dev/null | grep -v '^[[:space:]]*#' | tail -1)
+        accept_hosts=$(grep -E 'accept[[:space:]]+hosts' "$exim_conf" 2>/dev/null | grep -v '^[[:space:]]*#' | tail -1)
+        if printf '%s %s' "$relay_hosts" "$accept_hosts" | grep -Eq '\*|0\.0\.0\.0/0|/0'; then
+            detail+="Exim 릴레이 허용 범위 과다. "
+            cur_state="${cur_state}; Exim=${relay_hosts:-$accept_hosts}"
+            status=$(merge_status "$status" "취약")
+        elif [ -n "$relay_hosts" ] || [ -n "$accept_hosts" ]; then
+            detail+="Exim 릴레이 제한 설정 확인. "
+            cur_state="${cur_state}; Exim=${relay_hosts:-$accept_hosts}"
+            status=$(merge_status "$status" "양호")
+        else
+            detail+="Exim 릴레이 제한 설정 확인 필요. "
+            cur_state="${cur_state}; Exim=명시 설정 확인불가"
+            status=$(merge_status "$status" "수동점검")
+        fi
+    fi
+
+    cur_state=$(printf '%s' "$cur_state" | sed 's/^;[[:space:]]*//')
+
+    if [ "$status" = "N/A" ]; then
+        detail="메일 서비스 미사용. "
+        cur_state="메일 서비스 미사용"
+    fi
+
+    add_result "ISMS-U-47" "서비스 관리" "스팸 메일 릴레이 제한" "상" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-48: expn, vrfy 명령어 제한
+# ISMS-U-48: expn, vrfy 명령어 제한
 check_U48() {
     local status="N/A"
     local detail=""
+    local cur_state=""
+    local cmd="grep PrivacyOptions /etc/mail/sendmail.cf; postconf disable_vrfy_command; grep -E 'acl_smtp_vrfy|acl_smtp_expn' /etc/exim/exim.conf /etc/exim4/exim4.conf"
+    local remediation="Sendmail: PrivacyOptions에 noexpn, novrfy 또는 goaway 설정. Postfix: disable_vrfy_command=yes 설정. Exim: acl_smtp_vrfy/acl_smtp_expn 허용 설정 제거."
 
-    if ps -ef 2>/dev/null | grep -v grep | grep -q sendmail; then
+    if mail_sendmail_active; then
         local priv_opts
         priv_opts=$(grep "PrivacyOptions" /etc/mail/sendmail.cf 2>/dev/null | grep -v "^#")
-        if echo "$priv_opts" | grep -qi "noexpn" && echo "$priv_opts" | grep -qi "novrfy"; then
-            status="양호"
-            detail="noexpn, novrfy 설정됨. "
+        if { echo "$priv_opts" | grep -qi "noexpn" && echo "$priv_opts" | grep -qi "novrfy"; } || \
+           echo "$priv_opts" | grep -qi "goaway"; then
+            detail+="Sendmail noexpn/novrfy 또는 goaway 설정됨. "
+            cur_state="Sendmail=${priv_opts:-미설정}"
+            status=$(merge_status "$status" "양호")
         else
-            status="취약"
-            detail="noexpn/novrfy 미설정: $priv_opts. "
+            detail+="Sendmail noexpn/novrfy 미설정: ${priv_opts:-미설정}. "
+            cur_state="Sendmail=${priv_opts:-미설정}"
+            status=$(merge_status "$status" "취약")
         fi
-    elif systemctl is-active postfix &>/dev/null; then
+    fi
+
+    if mail_postfix_active; then
         local vrfy
         vrfy=$(postconf disable_vrfy_command 2>/dev/null)
         if echo "$vrfy" | grep -qi "yes"; then
-            status="양호"
-            detail="Postfix disable_vrfy_command=yes. "
+            detail+="Postfix disable_vrfy_command=yes. "
+            cur_state="${cur_state}; Postfix=${vrfy:-미설정}"
+            status=$(merge_status "$status" "양호")
         else
-            status="취약"
-            detail="Postfix: ${vrfy:-확인불가}. "
+            detail+="Postfix disable_vrfy_command 미설정(${vrfy:-확인불가}). "
+            cur_state="${cur_state}; Postfix=${vrfy:-확인불가}"
+            status=$(merge_status "$status" "취약")
         fi
-    else
-        detail="메일 서비스 미사용. "
     fi
 
-    add_result "U-48" "서비스 관리" "expn, vrfy 명령어 제한" "중" "$status" "$detail" "공통" "grep PrivacyOptions /etc/mail/sendmail.cf; postconf disable_vrfy_command" "$detail" "Sendmail: PrivacyOptions에 noexpn, novrfy 추가. Postfix: disable_vrfy_command=yes 설정."
+    if mail_exim_active; then
+        local exim_conf
+        local exim_vrfy
+        local exim_expn
+        exim_conf=$(mail_exim_config)
+        if [ -n "$exim_conf" ]; then
+            exim_vrfy=$(grep -E 'acl_smtp_vrfy[[:space:]]*=' "$exim_conf" 2>/dev/null | grep -v '^[[:space:]]*#')
+            exim_expn=$(grep -E 'acl_smtp_expn[[:space:]]*=' "$exim_conf" 2>/dev/null | grep -v '^[[:space:]]*#')
+            if printf '%s %s' "$exim_vrfy" "$exim_expn" | grep -qi 'accept'; then
+                detail+="Exim expn/vrfy 허용 설정 존재. "
+                cur_state="${cur_state}; Exim=${exim_vrfy:-$exim_expn}"
+                status=$(merge_status "$status" "취약")
+            else
+                detail+="Exim expn/vrfy 허용 설정 없음. "
+                cur_state="${cur_state}; Exim=허용 설정 없음"
+                status=$(merge_status "$status" "양호")
+            fi
+        else
+            detail+="Exim 설정 파일 확인 필요. "
+            cur_state="${cur_state}; Exim=설정 파일 확인불가"
+            status=$(merge_status "$status" "수동점검")
+        fi
+    fi
+
+    cur_state=$(printf '%s' "$cur_state" | sed 's/^;[[:space:]]*//')
+
+    if [ "$status" = "N/A" ]; then
+        detail="메일 서비스 미사용. "
+        cur_state="메일 서비스 미사용"
+    fi
+
+    add_result "ISMS-U-48" "서비스 관리" "expn, vrfy 명령어 제한" "중" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-49: DNS 보안 버전 패치
+# ISMS-U-49: DNS 보안 버전 패치
 check_U49() {
     local status="N/A"
     local detail=""
@@ -1573,10 +1800,10 @@ check_U49() {
         detail="DNS 서비스 미사용. "
     fi
 
-    add_result "U-49" "서비스 관리" "DNS 보안 버전 패치" "상" "$status" "$detail" "공통" "named -v; ps -ef | grep named" "$detail" "DNS(BIND) 최신 보안 패치 적용. 미사용 시 서비스 비활성화."
+    add_result "ISMS-U-49" "서비스 관리" "DNS 보안 버전 패치" "상" "$status" "$detail" "공통" "named -v; ps -ef | grep named" "$detail" "DNS(BIND) 최신 보안 패치 적용. 미사용 시 서비스 비활성화."
 }
 
-# U-50: DNS Zone Transfer 설정
+# ISMS-U-50: DNS Zone Transfer 설정
 check_U50() {
     local status="N/A"
     local detail=""
@@ -1608,10 +1835,10 @@ check_U50() {
         detail="DNS 서비스 미사용. "
     fi
 
-    add_result "U-50" "서비스 관리" "DNS Zone Transfer 설정" "상" "$status" "$detail" "공통" "grep 'allow-transfer' /etc/named.conf /etc/bind/named.conf" "$detail" "named.conf에서 allow-transfer에 허가된 Secondary DNS 서버 IP만 설정. allow-transfer { none; }; 또는 특정 IP 지정."
+    add_result "ISMS-U-50" "서비스 관리" "DNS Zone Transfer 설정" "상" "$status" "$detail" "공통" "grep 'allow-transfer' /etc/named.conf /etc/bind/named.conf" "$detail" "named.conf에서 allow-transfer에 허가된 Secondary DNS 서버 IP만 설정. allow-transfer { none; }; 또는 특정 IP 지정."
 }
 
-# U-51: DNS 서비스의 취약한 동적 업데이트 설정 금지
+# ISMS-U-51: DNS 서비스의 취약한 동적 업데이트 설정 금지
 check_U51() {
     local status="N/A"
     local detail=""
@@ -1644,10 +1871,10 @@ check_U51() {
         detail="DNS 서비스 미사용. "
     fi
 
-    add_result "U-51" "서비스 관리" "DNS 서비스의 취약한 동적 업데이트 설정 금지" "중" "$status" "$detail" "기반시설" "grep 'allow-update' /etc/named.conf /etc/bind/named.conf" "$detail" "named.conf에서 allow-update { none; }; 설정으로 동적 업데이트 비활성화."
+    add_result "ISMS-U-51" "서비스 관리" "DNS 서비스의 취약한 동적 업데이트 설정 금지" "중" "$status" "$detail" "기반시설" "grep 'allow-update' /etc/named.conf /etc/bind/named.conf" "$detail" "named.conf에서 allow-update { none; }; 설정으로 동적 업데이트 비활성화."
 }
 
-# U-52: Telnet 서비스 비활성화
+# ISMS-U-52: Telnet 서비스 비활성화
 check_U52() {
     local status="양호"
     local detail=""
@@ -1673,10 +1900,10 @@ check_U52() {
         fi
     fi
 
-    add_result "U-52" "서비스 관리" "Telnet 서비스 비활성화" "중" "$status" "$detail" "공통" "systemctl is-active telnet.socket; ps -ef | grep telnetd" "$detail" "Telnet 서비스 비활성화: systemctl stop telnet.socket && systemctl disable telnet.socket. SSH 사용 권장."
+    add_result "ISMS-U-52" "서비스 관리" "Telnet 서비스 비활성화" "중" "$status" "$detail" "공통" "systemctl is-active telnet.socket; ps -ef | grep telnetd" "$detail" "Telnet 서비스 비활성화: systemctl stop telnet.socket && systemctl disable telnet.socket. SSH 사용 권장."
 }
 
-# U-53: FTP 서비스 정보 노출 제한
+# ISMS-U-53: FTP 서비스 정보 노출 제한
 check_U53() {
     local status="N/A"
     local detail=""
@@ -1706,10 +1933,10 @@ check_U53() {
         detail="FTP 서비스 미사용. "
     fi
 
-    add_result "U-53" "서비스 관리" "FTP 서비스 정보 노출 제한" "하" "$status" "$detail" "기반시설" "grep ftpd_banner /etc/vsftpd.conf; grep ServerIdent /etc/proftpd/proftpd.conf" "$detail" "vsftpd: ftpd_banner=경고메시지 설정. ProFTPD: ServerIdent on '경고메시지' 설정."
+    add_result "ISMS-U-53" "서비스 관리" "FTP 서비스 정보 노출 제한" "하" "$status" "$detail" "기반시설" "grep ftpd_banner /etc/vsftpd.conf; grep ServerIdent /etc/proftpd/proftpd.conf" "$detail" "vsftpd: ftpd_banner=경고메시지 설정. ProFTPD: ServerIdent on '경고메시지' 설정."
 }
 
-# U-54: 암호화되지 않는 FTP 서비스 비활성화
+# ISMS-U-54: 암호화되지 않는 FTP 서비스 비활성화
 check_U54() {
     local status="양호"
     local detail=""
@@ -1743,10 +1970,10 @@ check_U54() {
         status="양호"
     fi
 
-    add_result "U-54" "서비스 관리" "암호화되지 않는 FTP 서비스 비활성화" "중" "$status" "$detail" "공통" "ps -ef | grep -E 'vsftpd|proftpd|ftpd'; grep ssl_enable /etc/vsftpd.conf" "$detail" "FTP 서비스 비활성화 또는 SFTP/FTPS 사용. vsftpd: ssl_enable=YES 설정."
+    add_result "ISMS-U-54" "서비스 관리" "암호화되지 않는 FTP 서비스 비활성화" "중" "$status" "$detail" "공통" "ps -ef | grep -E 'vsftpd|proftpd|ftpd'; grep ssl_enable /etc/vsftpd.conf" "$detail" "FTP 서비스 비활성화 또는 SFTP/FTPS 사용. vsftpd: ssl_enable=YES 설정."
 }
 
-# U-55: FTP 계정 Shell 제한
+# ISMS-U-55: FTP 계정 Shell 제한
 check_U55() {
     local status="N/A"
     local detail=""
@@ -1766,10 +1993,10 @@ check_U55() {
         status="양호"
     fi
 
-    add_result "U-55" "서비스 관리" "FTP 계정 Shell 제한" "중" "$status" "$detail" "기반시설" "grep '^ftp' /etc/passwd" "$detail" "ftp 계정 쉘을 /sbin/nologin으로 변경: usermod -s /sbin/nologin ftp"
+    add_result "ISMS-U-55" "서비스 관리" "FTP 계정 Shell 제한" "중" "$status" "$detail" "기반시설" "grep '^ftp' /etc/passwd" "$detail" "ftp 계정 쉘을 /sbin/nologin으로 변경: usermod -s /sbin/nologin ftp"
 }
 
-# U-56: FTP 서비스 접근 제어 설정
+# ISMS-U-56: FTP 서비스 접근 제어 설정
 check_U56() {
     local status="N/A"
     local detail=""
@@ -1798,10 +2025,10 @@ check_U56() {
         detail="FTP 서비스 미사용. "
     fi
 
-    add_result "U-56" "서비스 관리" "FTP 서비스 접근 제어 설정" "하" "$status" "$detail" "기반시설" "grep -E 'vsftpd|ftpd' /etc/hosts.allow /etc/hosts.deny" "$detail" "TCP Wrapper(/etc/hosts.allow, /etc/hosts.deny) 또는 방화벽으로 FTP 접근 IP 제한."
+    add_result "ISMS-U-56" "서비스 관리" "FTP 서비스 접근 제어 설정" "하" "$status" "$detail" "기반시설" "grep -E 'vsftpd|ftpd' /etc/hosts.allow /etc/hosts.deny" "$detail" "TCP Wrapper(/etc/hosts.allow, /etc/hosts.deny) 또는 방화벽으로 FTP 접근 IP 제한."
 }
 
-# U-57: Ftpusers 파일 설정
+# ISMS-U-57: Ftpusers 파일 설정
 check_U57() {
     local status="N/A"
     local detail=""
@@ -1834,10 +2061,10 @@ check_U57() {
         detail="FTP 서비스 미사용. "
     fi
 
-    add_result "U-57" "서비스 관리" "Ftpusers 파일 설정" "중" "$status" "$detail" "공통" "grep root /etc/ftpusers /etc/vsftpd/ftpusers /etc/vsftpd/user_list" "$detail" "ftpusers 파일에 root 계정 등록하여 FTP root 접근 차단."
+    add_result "ISMS-U-57" "서비스 관리" "Ftpusers 파일 설정" "중" "$status" "$detail" "공통" "grep root /etc/ftpusers /etc/vsftpd/ftpusers /etc/vsftpd/user_list" "$detail" "ftpusers 파일에 root 계정 등록하여 FTP root 접근 차단."
 }
 
-# U-58: 불필요한 SNMP 서비스 구동 점검
+# ISMS-U-58: 불필요한 SNMP 서비스 구동 점검
 check_U58() {
     local status="양호"
     local detail=""
@@ -1849,10 +2076,10 @@ check_U58() {
         detail="SNMP 서비스 미사용. "
     fi
 
-    add_result "U-58" "서비스 관리" "불필요한 SNMP 서비스 구동 점검" "중" "$status" "$detail" "기반시설" "systemctl is-active snmpd; ps -ef | grep snmpd" "$detail" "불필요 시 SNMP 서비스 비활성화: systemctl stop snmpd && systemctl disable snmpd"
+    add_result "ISMS-U-58" "서비스 관리" "불필요한 SNMP 서비스 구동 점검" "중" "$status" "$detail" "기반시설" "systemctl is-active snmpd; ps -ef | grep snmpd" "$detail" "불필요 시 SNMP 서비스 비활성화: systemctl stop snmpd && systemctl disable snmpd"
 }
 
-# U-59: 안전한 SNMP 버전 사용
+# ISMS-U-59: 안전한 SNMP 버전 사용
 check_U59() {
     local status="N/A"
     local detail=""
@@ -1880,10 +2107,10 @@ check_U59() {
         detail="SNMP 서비스 미사용. "
     fi
 
-    add_result "U-59" "서비스 관리" "안전한 SNMP 버전 사용" "상" "$status" "$detail" "기반시설" "grep -E '^(createUser|rouser|rwuser|rocommunity|rwcommunity)' /etc/snmp/snmpd.conf" "$detail" "SNMP v3 사용 설정. v1/v2c community 설정 제거하고 SNMPv3 인증/암호화 사용."
+    add_result "ISMS-U-59" "서비스 관리" "안전한 SNMP 버전 사용" "상" "$status" "$detail" "기반시설" "grep -E '^(createUser|rouser|rwuser|rocommunity|rwcommunity)' /etc/snmp/snmpd.conf" "$detail" "SNMP v3 사용 설정. v1/v2c community 설정 제거하고 SNMPv3 인증/암호화 사용."
 }
 
-# U-60: SNMP Community String 복잡성 설정
+# ISMS-U-60: SNMP Community String 복잡성 설정
 check_U60() {
     local status="N/A"
     local detail=""
@@ -1916,10 +2143,10 @@ check_U60() {
         detail="SNMP 서비스 미사용. "
     fi
 
-    add_result "U-60" "서비스 관리" "SNMP Community String 복잡성 설정" "중" "$status" "$detail" "공통" "grep -E '^(rocommunity|rwcommunity)' /etc/snmp/snmpd.conf" "$detail" "Community String을 public/private에서 추측 어려운 복잡한 문자열(8자 이상)로 변경."
+    add_result "ISMS-U-60" "서비스 관리" "SNMP Community String 복잡성 설정" "중" "$status" "$detail" "공통" "grep -E '^(rocommunity|rwcommunity)' /etc/snmp/snmpd.conf" "$detail" "Community String을 public/private에서 추측 어려운 복잡한 문자열(8자 이상)로 변경."
 }
 
-# U-61: SNMP Access Control 설정
+# ISMS-U-61: SNMP Access Control 설정
 check_U61() {
     local status="N/A"
     local detail=""
@@ -1940,16 +2167,17 @@ check_U61() {
         detail="SNMP 서비스 미사용. "
     fi
 
-    add_result "U-61" "서비스 관리" "SNMP Access Control 설정" "상" "$status" "$detail" "기반시설" "grep -E '^(com2sec|access|view)' /etc/snmp/snmpd.conf" "$detail" "/etc/snmp/snmpd.conf에서 com2sec, access, view 설정으로 SNMP 접근 제어."
+    add_result "ISMS-U-61" "서비스 관리" "SNMP Access Control 설정" "상" "$status" "$detail" "기반시설" "grep -E '^(com2sec|access|view)' /etc/snmp/snmpd.conf" "$detail" "/etc/snmp/snmpd.conf에서 com2sec, access, view 설정으로 SNMP 접근 제어."
 }
 
-# U-62: 로그인 시 경고 메시지 설정
+# ISMS-U-62: 로그인 시 경고 메시지 설정
 check_U62() {
     local status="취약"
     local detail=""
-    local cmd="cat /etc/motd; cat /etc/issue; cat /etc/issue.net; grep Banner /etc/ssh/sshd_config"
+    local cmd="cat /etc/motd; cat /etc/issue; cat /etc/issue.net; grep Banner /etc/ssh/sshd_config; grep SmtpGreetingMessage /etc/mail/sendmail.cf; grep smtpd_banner /etc/postfix/main.cf; grep smtp_banner /etc/exim/exim.conf /etc/exim4/exim4.conf"
     local cur_state=""
-    local remediation="/etc/motd, /etc/issue, /etc/issue.net 파일에 경고 메시지 작성. SSH: /etc/ssh/sshd_config에 Banner /etc/issue.net 설정."
+    local remediation="/etc/motd, /etc/issue, /etc/issue.net 파일에 경고 메시지 작성. SSH: /etc/ssh/sshd_config에 Banner /etc/issue.net 설정. Sendmail: SmtpGreetingMessage 설정. Postfix: smtpd_banner 설정. Exim: smtp_banner 설정."
+    local smtp_vuln="false"
 
     # Check /etc/motd, /etc/issue, /etc/issue.net
     for f in /etc/motd /etc/issue /etc/issue.net; do
@@ -1975,15 +2203,65 @@ check_U62() {
         fi
     fi
 
-    if [ "$status" = "취약" ]; then
-        detail="로그인 경고 메시지 미설정. "
-        cur_state="경고 메시지 미설정"
+    if mail_sendmail_active; then
+        local sendmail_banner
+        sendmail_banner=$(grep -E '^[[:space:]]*O?[[:space:]]*SmtpGreetingMessage' /etc/mail/sendmail.cf 2>/dev/null | grep -v '^[[:space:]]*#' | head -1)
+        if [ -n "$sendmail_banner" ]; then
+            detail+="Sendmail SMTP 배너 설정됨. "
+            cur_state+="Sendmail Banner=설정됨; "
+            status="양호"
+        else
+            detail+="Sendmail SMTP 배너 미설정. "
+            cur_state+="Sendmail Banner=미설정; "
+            smtp_vuln="true"
+        fi
     fi
 
-    add_result "U-62" "서비스 관리" "로그인 시 경고 메시지 설정" "하" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
+    if mail_postfix_active; then
+        local postfix_banner
+        postfix_banner=$(grep -E '^[[:space:]]*smtpd_banner[[:space:]]*=' /etc/postfix/main.cf 2>/dev/null | grep -v '^[[:space:]]*#' | head -1)
+        if [ -n "$postfix_banner" ]; then
+            detail+="Postfix SMTP 배너 설정됨. "
+            cur_state+="Postfix Banner=설정됨; "
+            status="양호"
+        else
+            detail+="Postfix SMTP 배너 미설정. "
+            cur_state+="Postfix Banner=미설정; "
+            smtp_vuln="true"
+        fi
+    fi
+
+    if mail_exim_active; then
+        local exim_conf
+        local exim_banner
+        exim_conf=$(mail_exim_config)
+        exim_banner=$(grep -E '^[[:space:]]*smtp_banner[[:space:]]*=' "$exim_conf" 2>/dev/null | grep -v '^[[:space:]]*#' | head -1)
+        if [ -n "$exim_banner" ]; then
+            detail+="Exim SMTP 배너 설정됨. "
+            cur_state+="Exim Banner=설정됨; "
+            status="양호"
+        else
+            detail+="Exim SMTP 배너 미설정. "
+            cur_state+="Exim Banner=미설정; "
+            smtp_vuln="true"
+        fi
+    fi
+
+    if [ "$smtp_vuln" = "true" ]; then
+        status="취약"
+    fi
+
+    if [ "$status" = "취약" ]; then
+        if [ -z "$detail" ]; then
+            detail="로그인 경고 메시지 미설정. "
+            cur_state="경고 메시지 미설정"
+        fi
+    fi
+
+    add_result "ISMS-U-62" "서비스 관리" "로그인 시 경고 메시지 설정" "하" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-63: sudo 명령어 접근 관리
+# ISMS-U-63: sudo 명령어 접근 관리
 check_U63() {
     local status="양호"
     local detail=""
@@ -2002,14 +2280,14 @@ check_U63() {
 
     local cur_state_63
     cur_state_63=$(ls -l /etc/sudoers 2>/dev/null | awk '{print $1, $3, $4, $9}')
-    add_result "U-63" "서비스 관리" "sudo 명령어 접근 관리" "중" "$status" "$detail" "기반시설" "ls -l /etc/sudoers" "${cur_state_63:-/etc/sudoers 없음}" "chown root /etc/sudoers && chmod 440 /etc/sudoers. visudo로 sudoers 편집."
+    add_result "ISMS-U-63" "서비스 관리" "sudo 명령어 접근 관리" "중" "$status" "$detail" "기반시설" "ls -l /etc/sudoers" "${cur_state_63:-/etc/sudoers 없음}" "chown root /etc/sudoers && chmod 440 /etc/sudoers. visudo로 sudoers 편집."
 }
 
 ###############################################################################
 # 4. 패치 관리
 ###############################################################################
 
-# U-64: 주기적 보안 패치 및 벤더 권고사항 적용
+# ISMS-U-64: 주기적 보안 패치 및 벤더 권고사항 적용
 check_U64() {
     local status="수동점검"
     local detail=""
@@ -2025,14 +2303,14 @@ check_U64() {
     detail="OS: ${os_info:-확인불가}, Kernel: ${kernel:-확인불가}. 패치 정책 수립 여부 수동 확인 필요. "
     local cur_state="OS: ${os_info:-확인불가}, Kernel: ${kernel:-확인불가}"
 
-    add_result "U-64" "패치 관리" "주기적 보안 패치 및 벤더 권고사항 적용" "상" "$status" "$detail" "공통" "cat /etc/os-release; uname -r" "$cur_state" "주기적 보안 패치 정책 수립 및 적용. apt update && apt upgrade 또는 yum update 정기 실행."
+    add_result "ISMS-U-64" "패치 관리" "주기적 보안 패치 및 벤더 권고사항 적용" "상" "$status" "$detail" "공통" "cat /etc/os-release; uname -r" "$cur_state" "주기적 보안 패치 정책 수립 및 적용. apt update && apt upgrade 또는 yum update 정기 실행."
 }
 
 ###############################################################################
 # 5. 로그 관리
 ###############################################################################
 
-# U-65: NTP 및 시각 동기화 설정
+# ISMS-U-65: NTP 및 시각 동기화 설정
 check_U65() {
     local status="취약"
     local detail=""
@@ -2059,10 +2337,10 @@ check_U65() {
         cur_state="NTP 서비스 미활성화"
     fi
 
-    add_result "U-65" "로그 관리" "NTP 및 시각 동기화 설정" "중" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-65" "로그 관리" "NTP 및 시각 동기화 설정" "중" "$status" "$detail" "기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-66: 정책에 따른 시스템 로깅 설정
+# ISMS-U-66: 정책에 따른 시스템 로깅 설정
 check_U66() {
     local status="취약"
     local detail=""
@@ -2096,10 +2374,10 @@ check_U66() {
         cur_state="로깅 서비스 미활성화"
     fi
 
-    add_result "U-66" "로그 관리" "정책에 따른 시스템 로깅 설정" "중" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-66" "로그 관리" "정책에 따른 시스템 로깅 설정" "중" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
-# U-67: 로그 디렉터리 소유자 및 권한 설정
+# ISMS-U-67: 로그 디렉터리 소유자 및 권한 설정
 check_U67() {
     local status="양호"
     local detail=""
@@ -2128,7 +2406,7 @@ check_U67() {
         cur_state="/var/log 파일 권한 적절"
     fi
 
-    add_result "U-67" "로그 관리" "로그 디렉터리 소유자 및 권한 설정" "중" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-U-67" "로그 관리" "로그 디렉터리 소유자 및 권한 설정" "중" "$status" "$detail" "공통" "$cmd" "$cur_state" "$remediation"
 }
 
 ###############################################################################
@@ -2193,81 +2471,81 @@ progress() {
 }
 
 # 1. 계정 관리
-progress "U-01"; check_U01
-progress "U-02"; check_U02
-progress "U-03"; check_U03
-progress "U-04"; check_U04
-progress "U-05"; check_U05
-progress "U-06"; check_U06
-progress "U-07"; check_U07
-progress "U-08"; check_U08
-progress "U-09"; check_U09
-progress "U-10"; check_U10
-progress "U-11"; check_U11
-progress "U-12"; check_U12
-progress "U-13"; check_U13
+progress "ISMS-U-01"; check_U01
+progress "ISMS-U-02"; check_U02
+progress "ISMS-U-03"; check_U03
+progress "ISMS-U-04"; check_U04
+progress "ISMS-U-05"; check_U05
+progress "ISMS-U-06"; check_U06
+progress "ISMS-U-07"; check_U07
+progress "ISMS-U-08"; check_U08
+progress "ISMS-U-09"; check_U09
+progress "ISMS-U-10"; check_U10
+progress "ISMS-U-11"; check_U11
+progress "ISMS-U-12"; check_U12
+progress "ISMS-U-13"; check_U13
 
 # 2. 파일 및 디렉토리 관리
-progress "U-14"; check_U14
-progress "U-15"; check_U15
-progress "U-16"; check_U16
-progress "U-17"; check_U17
-progress "U-18"; check_U18
-progress "U-19"; check_U19
-progress "U-20"; check_U20
-progress "U-21"; check_U21
-progress "U-22"; check_U22
-progress "U-23"; check_U23
-progress "U-24"; check_U24
-progress "U-25"; check_U25
-progress "U-26"; check_U26
-progress "U-27"; check_U27
-progress "U-28"; check_U28
-progress "U-29"; check_U29
-progress "U-30"; check_U30
-progress "U-31"; check_U31
-progress "U-32"; check_U32
-progress "U-33"; check_U33
+progress "ISMS-U-14"; check_U14
+progress "ISMS-U-15"; check_U15
+progress "ISMS-U-16"; check_U16
+progress "ISMS-U-17"; check_U17
+progress "ISMS-U-18"; check_U18
+progress "ISMS-U-19"; check_U19
+progress "ISMS-U-20"; check_U20
+progress "ISMS-U-21"; check_U21
+progress "ISMS-U-22"; check_U22
+progress "ISMS-U-23"; check_U23
+progress "ISMS-U-24"; check_U24
+progress "ISMS-U-25"; check_U25
+progress "ISMS-U-26"; check_U26
+progress "ISMS-U-27"; check_U27
+progress "ISMS-U-28"; check_U28
+progress "ISMS-U-29"; check_U29
+progress "ISMS-U-30"; check_U30
+progress "ISMS-U-31"; check_U31
+progress "ISMS-U-32"; check_U32
+progress "ISMS-U-33"; check_U33
 
 # 3. 서비스 관리
-progress "U-34"; check_U34
-progress "U-35"; check_U35
-progress "U-36"; check_U36
-progress "U-37"; check_U37
-progress "U-38"; check_U38
-progress "U-39"; check_U39
-progress "U-40"; check_U40
-progress "U-41"; check_U41
-progress "U-42"; check_U42
-progress "U-43"; check_U43
-progress "U-44"; check_U44
-progress "U-45"; check_U45
-progress "U-46"; check_U46
-progress "U-47"; check_U47
-progress "U-48"; check_U48
-progress "U-49"; check_U49
-progress "U-50"; check_U50
-progress "U-51"; check_U51
-progress "U-52"; check_U52
-progress "U-53"; check_U53
-progress "U-54"; check_U54
-progress "U-55"; check_U55
-progress "U-56"; check_U56
-progress "U-57"; check_U57
-progress "U-58"; check_U58
-progress "U-59"; check_U59
-progress "U-60"; check_U60
-progress "U-61"; check_U61
-progress "U-62"; check_U62
-progress "U-63"; check_U63
+progress "ISMS-U-34"; check_U34
+progress "ISMS-U-35"; check_U35
+progress "ISMS-U-36"; check_U36
+progress "ISMS-U-37"; check_U37
+progress "ISMS-U-38"; check_U38
+progress "ISMS-U-39"; check_U39
+progress "ISMS-U-40"; check_U40
+progress "ISMS-U-41"; check_U41
+progress "ISMS-U-42"; check_U42
+progress "ISMS-U-43"; check_U43
+progress "ISMS-U-44"; check_U44
+progress "ISMS-U-45"; check_U45
+progress "ISMS-U-46"; check_U46
+progress "ISMS-U-47"; check_U47
+progress "ISMS-U-48"; check_U48
+progress "ISMS-U-49"; check_U49
+progress "ISMS-U-50"; check_U50
+progress "ISMS-U-51"; check_U51
+progress "ISMS-U-52"; check_U52
+progress "ISMS-U-53"; check_U53
+progress "ISMS-U-54"; check_U54
+progress "ISMS-U-55"; check_U55
+progress "ISMS-U-56"; check_U56
+progress "ISMS-U-57"; check_U57
+progress "ISMS-U-58"; check_U58
+progress "ISMS-U-59"; check_U59
+progress "ISMS-U-60"; check_U60
+progress "ISMS-U-61"; check_U61
+progress "ISMS-U-62"; check_U62
+progress "ISMS-U-63"; check_U63
 
 # 4. 패치 관리
-progress "U-64"; check_U64
+progress "ISMS-U-64"; check_U64
 
 # 5. 로그 관리
-progress "U-65"; check_U65
-progress "U-66"; check_U66
-progress "U-67"; check_U67
+progress "ISMS-U-65"; check_U65
+progress "ISMS-U-66"; check_U66
+progress "ISMS-U-67"; check_U67
 
 # 클라우드 가이드 추가 항목
 progress "CL-LIN-01"; check_CL_LIN_01

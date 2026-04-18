@@ -1,0 +1,20 @@
+{
+  "name": "cce-vuln-check-local",
+  "interface": {
+    "displayName": "CCE Vuln Check Local Plugins"
+  },
+  "plugins": [
+    {
+      "name": "cce-vuln-check",
+      "source": {
+        "source": "local",
+        "path": "./plugins/cce-vuln-check"
+      },
+      "policy": {
+        "installation": "INSTALLED_BY_DEFAULT",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

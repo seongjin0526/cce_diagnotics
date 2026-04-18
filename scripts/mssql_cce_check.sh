@@ -42,6 +42,45 @@ trap "rm -rf $TEMP_DIR" EXIT
 # --- JSON helper functions ---
 results=()
 
+normalize_trace_value() {
+    printf '%s' "$1" | tr '\t\r\n' '   ' | sed 's/  */ /g; s/^ //; s/ $//'
+}
+
+summarize_output() {
+    printf '%s' "$1" | head -n 5 | tr '\n' ' ' | sed 's/  */ /g; s/^ //; s/ $//'
+}
+
+output_has_negative_marker() {
+    printf '%s\n' "$1" | grep -Eiq '(^|[^[:alnum:]_-])(0|false|off|disabled|inactive|none|no|n|deny|denied|prohibit-password|without-password|never)([^[:alnum:]_-]|$)|계정 사용 안함|사용 안함|비활성'
+}
+
+output_has_positive_marker() {
+    printf '%s\n' "$1" | grep -Eiq '(^|[^[:alnum:]_-])(1|true|on|enabled|enable|active|yes|y|allow|allowed)([^[:alnum:]_-]|$)|활성'
+}
+
+first_numeric_value() {
+    printf '%s\n' "$1" | grep -Eo '[0-9]+' | head -1
+}
+
+log_result_trace() {
+    local code="$1"
+    local status="$2"
+    local title="$3"
+    local command="$4"
+    local current_state="$5"
+    local detail="$6"
+    local command_text
+    local current_state_text
+    local detail_text
+    command_text=$(normalize_trace_value "$command")
+    current_state_text=$(normalize_trace_value "$current_state")
+    detail_text=$(normalize_trace_value "$detail")
+    printf '\n[TRACE] code=%s status=%s title=%s\n' "$code" "$status" "$title"
+    printf '[TRACE] command=%s\n' "${command_text:--}"
+    printf '[TRACE] current_state=%s\n' "${current_state_text:--}"
+    printf '[TRACE] detail=%s\n' "${detail_text:--}"
+}
+
 add_result() {
     local code="$1"
     local category="$2"
@@ -53,6 +92,9 @@ add_result() {
     local command="$8"
     local current_state="$9"
     local remediation="${10}"
+    local raw_detail="$detail"
+    local raw_command="$command"
+    local raw_current_state="$current_state"
 
     # Escape strings for JSON
     detail=$(echo "$detail" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/ /g' | tr '\n' ' ' | sed 's/  */ /g')
@@ -62,6 +104,7 @@ add_result() {
     remediation=$(echo "$remediation" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/ /g' | tr '\n' ' ' | sed 's/  */ /g')
 
     results+=("{\"code\":\"$code\",\"category\":\"$category\",\"title\":\"$title\",\"importance\":\"$importance\",\"status\":\"$status\",\"detail\":\"$detail\",\"source\":\"$source\",\"command\":\"$command\",\"current_state\":\"$current_state\",\"remediation\":\"$remediation\"}")
+    log_result_trace "$code" "$status" "$title" "$raw_command" "$raw_current_state" "$raw_detail"
 }
 
 # --- Utility functions ---
@@ -81,7 +124,7 @@ check_file_owner_perm() {
     perm=$(stat -c '%a' "$file" 2>/dev/null)
 
     local owner_ok="false"
-    if [ "$owner" = "$expected_owner" ]; then
+    if [ -z "$expected_owner" ] || [ "$owner" = "$expected_owner" ]; then
         owner_ok="true"
     fi
 
@@ -97,11 +140,58 @@ check_file_owner_perm() {
     fi
 }
 
+get_process_snapshot() {
+    local pattern="$1"
+    local snapshot=""
+
+    if command -v ps >/dev/null 2>&1; then
+        snapshot=$(ps -ef 2>/dev/null | grep -v grep | grep -E "$pattern" || true)
+        if [ -n "$snapshot" ]; then
+            printf '%s
+' "$snapshot"
+            return 0
+        fi
+    fi
+
+    if command -v pgrep >/dev/null 2>&1; then
+        snapshot=$(pgrep -af "$pattern" 2>/dev/null || true)
+        if [ -n "$snapshot" ]; then
+            printf '%s
+' "$snapshot"
+            return 0
+        fi
+    fi
+
+    local pid_dir
+    for pid_dir in /proc/[0-9]*; do
+        [ -r "$pid_dir/cmdline" ] || continue
+        local cmdline
+        cmdline=$(tr '\0' ' ' < "$pid_dir/cmdline" 2>/dev/null || true)
+        [ -z "$cmdline" ] && continue
+        if printf '%s
+' "$cmdline" | grep -Eiq "$pattern"; then
+            local uid="unknown"
+            if [ -r "$pid_dir/status" ]; then
+                uid=$(awk '/^Uid:/ {print $2; exit}' "$pid_dir/status" 2>/dev/null || printf 'unknown')
+                if command -v id >/dev/null 2>&1; then
+                    uid=$(id -nu "$uid" 2>/dev/null || printf '%s' "$uid")
+                fi
+            fi
+            printf '%s %s
+' "$uid" "$cmdline"
+        fi
+    done
+}
+
 is_service_active() {
     local svc="$1"
-    if systemctl is-active "$svc" &>/dev/null; then
+    if command -v systemctl >/dev/null 2>&1 && systemctl is-active "$svc" &>/dev/null; then
         echo "active"
-    elif ps -ef | grep -v grep | grep -q "$svc"; then
+    elif command -v service >/dev/null 2>&1 && service "$svc" status >/dev/null 2>&1; then
+        echo "active"
+    elif command -v pgrep >/dev/null 2>&1 && pgrep -f "$svc" >/dev/null 2>&1; then
+        echo "active"
+    elif [ -n "$(get_process_snapshot "$svc")" ]; then
         echo "active"
     else
         echo "inactive"
@@ -124,7 +214,7 @@ run_mssql_query() {
 
 # --- Pre-flight: MSSQL 설치 확인 및 경로 탐지 ---
 SQLCMD_BIN=""
-MSSQL_CONF=""
+MSSQL_CONF="${MSSQL_CONF:-}"
 APP_FOUND="false"
 
 detect_app() {
@@ -175,68 +265,238 @@ if [ "$APP_FOUND" = "false" ]; then
 fi
 
 
-# CLD-MS-SQL-05 / D-24: Regisrtry Procedure Permission 제한
-check_CLD_MS_SQL_05() {
+# CSAP-MS-SQL-05 / ISMS-D-24: Regisrtry Procedure Permission 제한
+check_CSAP_MS_SQL_05() {
     local status="양호"
     local detail=""
-    local cmd="수동점검 필요"
+    local cmd="SELECT object_name\(id\) AS sp, user_name\(id\) AS grantee, user_name\(grantor\)"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ 새 쿼리를 통해 프로시저 제한 1\) SQL Server Management Studio → 새쿼리 2\) USE master; 3\) REVOKE <권한> ON object :: <시스템 확자 저장 프로시저명> TO public; ￭ 개체 탐색기를 통해 프로시저 제한 1\) SQL Server Management Studio → 개체 탐색기 → 데이터베이스 2\) 시스템 데이터베이스 → master → 프로그래밍 기능 → 확장 저장 프로시저 → 시스템 확장 저장 프로시저 3\) 아래 *비고\) 시스템 확장 저장 프로시저 제한 목록의 프로시저 별 → 마우스 우클릭 → 속성 4\) 사용 권한 → public 실행 권한 제거 [주요기반시설 가이드] guest/public에게 부여된 시스템 확장 저장 프로시저 권한 제거 [상세 조치 사례] l MSSQL Step 1\) SQL Server Management Studio > 개체 탐색기 > 데이터베이스 Step 2\) 시스템 데이터베이스 > master > 프로그래밍 기능 > 확장 저장 프로시저 > 시스템 확장 저장 프로시저 [ 시스템 확장 저장 프로시저 확인 ] Step 3\) 각 시스템 확장 저장 프로시저 제한 > 마우스 우클릭 > 속성 [ 시스템 확장 저장 프로시저 속성 확인 ] Step 4\) 사용 권한 > public 실행 권한 제거\(체크 해제\) [ public 실행 권한 제거 ] 시스템 확장 저장 프로시저 제한 sys.xp_readdmultistring sys.xp_redeletekey sys.xp_regdeletevalue sys.xp_regenumvalues sys.xp_regread sys.xp_regremovemultistring sys.xp_regwrite 08. DBMS 663"
 
-    status="수동점검"
-    detail="수동 점검 필요 항목입니다. 제한이 필요한 시스템 확장 저장 프로시저들이 DBA 외 guest/public에게 부여되지 않은 경우"
-    cur_state="수동점검 필요"
+    local output
+    output=$({
+        ( run_mssql_query "SELECT object_name\(id\) AS sp, user_name\(id\) AS grantee, user_name\(grantor\)" )
+    } 2>/dev/null | sed '/^$/d' | head -20)
+    cur_state="$output"
 
-    add_result "CLD-MS-SQL-05 / D-24" "DBMS > 3. 옵션 관리" "Regisrtry Procedure Permission 제한" "상" "$status" "$detail" "통합" "$cmd" "$cur_state" "$remediation"
+    if [ -z "$output" ]; then
+        status="N/A"
+        detail="명령 실행 결과 없음 또는 대상 미설치. "
+    else
+        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="해당 파일이 없으므로 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
+            local missing_text
+            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
+            status="수동점검"
+            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
+        else
+        if output_has_negative_marker "$output"; then
+            status="양호"
+            detail="제한이 필요한 시스템 확장 저장 프로시저들이 DBA 외 guest/public에게 부여되지 않은 경우"
+        elif output_has_positive_marker "$output"; then
+            status="취약"
+            detail="제한이 필요한 시스템 확장 저장 프로시저들이 DBA 외 guest/public에게 부여된 경우"
+        else
+            status="취약"
+            detail="제한이 필요한 시스템 확장 저장 프로시저들이 DBA 외 guest/public에게 부여된 경우"
+        fi
+        fi
+    fi
+    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
+
+    add_result "CSAP-MS-SQL-05 / ISMS-D-24" "DBMS > 3. 옵션 관리" "Regisrtry Procedure Permission 제한" "상" "$status" "$detail" "통합" "$cmd" "$cur_state" "$remediation"
 }
 
-# CLD-MS-SQL-06 / D-23: xp_cmdshell 사용 제한
-check_CLD_MS_SQL_06() {
+# CSAP-MS-SQL-06 / ISMS-D-23: xp_cmdshell 사용 제한
+check_CSAP_MS_SQL_06() {
     local status="양호"
     local detail=""
-    local cmd="수동점검 필요"
+    local cmd="SELECT name, value FROM sys.configurations WHERE name = xp_cmdshell;; EXEC sp_configure xp_cmdshell; SELECT * FROM sys.configurations WHERE name = allow updates;"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ 새 쿼리를 통해 프로시저 확인 1\) SQL Server Management Studio → 새쿼리 2\) EXEC sp_configure 'xp_cmdshell', 0; ￭ 개체 탐색기를 통해 프로시저 확인 1\) SQL Server Management Studio → 개체 탐색기 → 컴퓨터 이름 → 오른쪽 마우스 → 패싯 → 일반 2\) XPCmdShellEnabled 값 false 설정 [주요기반시설 가이드] xp_cmdshell 설정 값을 0 또는 False로 설정 [상세 조치 사례] l MSSQL [ xp_cmdshell 사용이 불필요한 경우ㅣ Step 1\) SQL Server Management Studio > 개체 탐색기 > 컴퓨터 이름 우클릭 > 패싯 > 일반 Step 2\) XPCmdShellEnabled 값 확인 2.1\) Microsoft SQL Server Management Studio에서 확인 [ 개체 탐색기를 통한 프로시저 확인 ] 2.2\) 퀴리문으로 확인 SELECT name, value FROM sys.configurations WHERE name = 'xp_cmdshell'; ※ value가 1이면 활성화, 0이면 비활성화 되어 있는 상태 Step 3\) XPCmdShellEnabled 값을 false로 설정 3.1\) Microsoft SQL Server Management Studio에서 설정 SQL Server Management Studio > 개체 탐색기 > 컴퓨터 이름 우클릭 > 패싯 > 일반 3.2\) 퀴리문으로 설정 EXEC sp_configure 'show advanced options', 1; GO RECONFIGURE; GO EXEC sp_configure 'xp_cmdshell', 1; GO RECONFIGURE GO [ xp_cmdshell 사용이 필요한 경우ㅣ Step 1\) xp_cmdshell의 public 실행 권한 제거 1.1\) Microsoft SQL Server Management Studio에서 제거 SQL Server Management Studio > 개체 탐색기 > [컴퓨터 이름] > 데이터베이스 > 시스템 데이터베이스 > master > 프로그래밍 기능 > 확장 저장 프로시저 > 시스템 확장 저장 프로시저 > sys.xp_cmdshell > 마우스 우클릭 > 속성 > 사용권한에서 public에 대한 사용권한에 '실행' 권한 제거 08. DBMS 1.2\) 퀴리문으로 public에 대한 실행 권한 제거 REVOKE EXECUTE ON master.dbo.xp_cmdshell TO public Step 1\) 서비스 계정\(애플리케이션 연동 등\)의 sysadmin 권한 제거 2.1\) Microsoft SQL Server Management Studio에서 제거 SQL Server Management Studio > 개체 탐색기 > [컴퓨터 이름] > 보안 > 로그인 > [각 계정 선택] > 마우스 우클릭 > 속성 > 서버 역할에서 sysadmin 권한 제거 2.2\) 퀴리문으로 서비스 계정의 sysadmin 권한 제거 - sysadmin 권한이 부여된 계정 확인 EXEC sp_helpsrvrolemember 'sysadmin' - sysadmin 권한이 부여된 계정에 대해 권한 제거 EXEC master..sp_dropsrvrolemember @loginame = N'<계정명>', @rolename = N'sysadmin' ※ 08. DBMS 661"
 
-    status="수동점검"
-    detail="수동 점검 필요 항목입니다. xp_cmdshell이 비활성화 되어 있거나, 활성화 되어 있으면 다음의 조건을 모두 만족하는 경우"
-    cur_state="수동점검 필요"
+    local output
+    output=$({
+        ( run_mssql_query "SELECT name, value FROM sys.configurations WHERE name = xp_cmdshell;" )
+        ( run_mssql_query "EXEC sp_configure xp_cmdshell" )
+        ( run_mssql_query "SELECT * FROM sys.configurations WHERE name = allow updates;" )
+    } 2>/dev/null | sed '/^$/d' | head -20)
+    cur_state="$output"
 
-    add_result "CLD-MS-SQL-06 / D-23" "보안 설정" "xp_cmdshell 사용 제한" "상" "$status" "$detail" "통합" "$cmd" "$cur_state" "$remediation"
+    if [ -z "$output" ]; then
+        status="N/A"
+        detail="명령 실행 결과 없음 또는 대상 미설치. "
+    else
+        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="해당 파일이 없으므로 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
+            local missing_text
+            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
+            status="수동점검"
+            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
+        else
+        if output_has_negative_marker "$output"; then
+            status="양호"
+            detail="xp_cmdshell이 비활성화 되어 있거나, 활성화 되어 있으면 다음의 조건을 모두 만족하는 경우"
+        elif output_has_positive_marker "$output"; then
+            status="취약"
+            detail="xp_cmdshell이 활성화 되어 있고, 양호의 조건을 만족하지 않는 경우"
+        else
+            status="수동점검"
+            detail="xp_cmdshell이 비활성화 되어 있거나, 활성화 되어 있으면 다음의 조건을 모두 만족하는 경우"
+        fi
+        fi
+    fi
+    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
+
+    add_result "CSAP-MS-SQL-06 / ISMS-D-23" "보안 설정" "xp_cmdshell 사용 제한" "상" "$status" "$detail" "통합" "$cmd" "$cur_state" "$remediation"
 }
 
-# CLD-MS-SQL-01: 불필요한 계정 제거
-check_CLD_MS_SQL_01() {
+# CSAP-MS-SQL-01: 불필요한 계정 제거
+check_CSAP_MS_SQL_01() {
     local status="양호"
     local detail=""
-    local cmd="수동점검 필요"
+    local cmd="SELECT log.name AS"
     local cur_state=""
     local remediation="￭ 새 쿼리를 통해 불필요한 계정 삭제 1\) SQL Server Management Studio → 새 쿼리 2\) DROP login \"로그인 사용자 계정명\" ￭ 개체 탐색기를 통해 불필요한 계정 삭제 1\) SQL Server Management Studio → 개체 탐색기 → 보안 → 로그인 2\) 해당 계정 오른쪽 마우스 → 삭제 → 확인"
 
-    status="수동점검"
-    detail="수동 점검 필요 항목입니다. 불필요한 계정이 존재하지 않는 경우"
-    cur_state="수동점검 필요"
+    local output
+    output=$({
+        ( run_mssql_query "SELECT log.name AS" )
+    } 2>/dev/null | sed '/^$/d' | head -20)
+    cur_state="$output"
 
-    add_result "CLD-MS-SQL-01" "패치 및 로그 관리" "불필요한 계정 제거" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
+    if [ -z "$output" ]; then
+        status="N/A"
+        detail="명령 실행 결과 없음 또는 대상 미설치. "
+    else
+        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="해당 파일이 없으므로 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
+            local missing_text
+            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
+            status="수동점검"
+            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
+        else
+        status="수동점검"
+        detail="명령 결과는 수집했지만 운영 정책/최신 기준 대조가 필요합니다. "
+        fi
+    fi
+    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
+
+    add_result "CSAP-MS-SQL-01" "패치 및 로그 관리" "불필요한 계정 제거" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
 
-# CLD-MS-SQL-02: SYSADMIN 권한 제한
-check_CLD_MS_SQL_02() {
+# CSAP-MS-SQL-02: SYSADMIN 권한 제한
+check_CSAP_MS_SQL_02() {
     local status="양호"
     local detail=""
-    local cmd="수동점검 필요"
+    local cmd="EXEC sp_helpsrvrolemember sysadmin"
     local cur_state=""
     local remediation="￭ 새 쿼리를 통해 역할 제거 1\) SQL Server Management Studio → 새 쿼리 2\) EXEC sp_droprolemember '<구성원 이름>', 'sysadmin' ￭ 개체 탐색기를 통해 역할 제거 1\) SQL Server Management Studio → 개체 탐색기 → 보안 → 로그인 2\) 계정별 오른쪽 마우스 → 속성 → 서버 역할에서 sysadmin 권한 해제"
 
-    status="수동점검"
-    detail="수동 점검 필요 항목입니다. sysadmin 역할 구성원에 관리자 구성원만"
-    cur_state="수동점검 필요"
+    local output
+    output=$({
+        ( run_mssql_query "EXEC sp_helpsrvrolemember sysadmin" )
+    } 2>/dev/null | sed '/^$/d' | head -20)
+    cur_state="$output"
 
-    add_result "CLD-MS-SQL-02" "계정 관리" "SYSADMIN 권한 제한" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
+    if [ -z "$output" ]; then
+        status="N/A"
+        detail="명령 실행 결과 없음 또는 대상 미설치. "
+    else
+        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="해당 파일이 없으므로 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
+            local missing_text
+            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
+            status="수동점검"
+            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
+        else
+        status="수동점검"
+        detail="명령 결과는 수집했지만 운영 정책/최신 기준 대조가 필요합니다. "
+        fi
+    fi
+    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
+
+    add_result "CSAP-MS-SQL-02" "계정 관리" "SYSADMIN 권한 제한" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
 
-# CLD-MS-SQL-03: SA 계정 패스워드 관리
-check_CLD_MS_SQL_03() {
+# CSAP-MS-SQL-03: SA 계정 패스워드 관리
+check_CSAP_MS_SQL_03() {
     local status="양호"
     local detail=""
     local cmd="수동점검 필요"
@@ -247,11 +507,11 @@ check_CLD_MS_SQL_03() {
     detail="수동 점검 필요 항목입니다. sa 계정에 패스워드가 설정된 경우"
     cur_state="수동점검 필요"
 
-    add_result "CLD-MS-SQL-03" "계정 관리" "SA 계정 패스워드 관리" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
+    add_result "CSAP-MS-SQL-03" "계정 관리" "SA 계정 패스워드 관리" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
 
-# CLD-MS-SQL-04: Guest 계정 사용 제한
-check_CLD_MS_SQL_04() {
+# CSAP-MS-SQL-04: Guest 계정 사용 제한
+check_CSAP_MS_SQL_04() {
     local status="양호"
     local detail=""
     local cmd="수동점검 필요"
@@ -262,11 +522,11 @@ check_CLD_MS_SQL_04() {
     detail="수동 점검 필요 항목입니다. 데이터베이스에 Guest 계정이 활성화되어"
     cur_state="수동점검 필요"
 
-    add_result "CLD-MS-SQL-04" "" "Guest 계정 사용 제한" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
+    add_result "CSAP-MS-SQL-04" "" "Guest 계정 사용 제한" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
 
-# CLD-MS-SQL-07: 로그 활성화
-check_CLD_MS_SQL_07() {
+# CSAP-MS-SQL-07: 로그 활성화
+check_CSAP_MS_SQL_07() {
     local status="양호"
     local detail=""
     local cmd="수동점검 필요"
@@ -277,26 +537,64 @@ check_CLD_MS_SQL_07() {
     detail="수동 점검 필요 항목입니다. 백업 정책이 수립되어 있으며 데이터,"
     cur_state="수동점검 필요"
 
-    add_result "CLD-MS-SQL-07" "패치 및 로그 관리" "로그 활성화" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
+    add_result "CSAP-MS-SQL-07" "패치 및 로그 관리" "로그 활성화" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
 
-# CLD-MS-SQL-08: 최신 보안 패치 적용
-check_CLD_MS_SQL_08() {
+# CSAP-MS-SQL-08: 최신 보안 패치 적용
+check_CSAP_MS_SQL_08() {
     local status="양호"
     local detail=""
-    local cmd="수동점검 필요"
+    local cmd="SELECT @@VERSION;"
     local cur_state=""
     local remediation="￭ 최신 보안 패치 적용 1\) 최신 보안 패치가 발표되면 패치 적용 ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
 
-    status="수동점검"
-    detail="수동 점검 필요 항목입니다. 최신 보안 패치가 적용되어 있는 경우"
-    cur_state="수동점검 필요"
+    local output
+    output=$({
+        ( run_mssql_query "SELECT @@VERSION;" )
+    } 2>/dev/null | sed '/^$/d' | head -20)
+    cur_state="$output"
 
-    add_result "CLD-MS-SQL-08" "패치 및 로그 관리" "최신 보안 패치 적용" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
+    if [ -z "$output" ]; then
+        status="N/A"
+        detail="명령 실행 결과 없음 또는 대상 미설치. "
+    else
+        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="해당 파일이 없으므로 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
+            local missing_text
+            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
+            status="수동점검"
+            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
+        else
+        status="수동점검"
+        detail="명령 결과는 수집했지만 운영 정책/최신 기준 대조가 필요합니다. "
+        fi
+    fi
+    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
+
+    add_result "CSAP-MS-SQL-08" "패치 및 로그 관리" "최신 보안 패치 적용" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
 
-# D-01: 기본 계정의 비밀번호, 정책 등을 변경하여 사용
-check_D_01() {
+# ISMS-D-01: 기본 계정의 비밀번호, 정책 등을 변경하여 사용
+check_ISMS_D_01() {
     local status="양호"
     local detail=""
     local cmd="수동점검 필요"
@@ -307,26 +605,26 @@ check_D_01() {
     detail="수동 점검 필요 항목입니다. 기본 계정의 초기 비밀번호를 변경하거나 잠금설정한 경우"
     cur_state="수동점검 필요"
 
-    add_result "D-01" "DBMS > 1. 계정 관리" "기본 계정의 비밀번호, 정책 등을 변경하여 사용" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-D-01" "DBMS > 1. 계정 관리" "기본 계정의 비밀번호, 정책 등을 변경하여 사용" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# D-02: 데이터베이스의 불필요 계정을 제거하거나, 잠금설정 후 사용
-check_D_02() {
+# ISMS-D-02: 데이터베이스의 불필요 계정을 제거하거나, 잠금설정 후 사용
+check_ISMS_D_02() {
     local status="양호"
     local detail=""
-    local cmd="수동점검 필요"
+    local cmd="EXEC sp_droplogin ' ';"
     local cur_state=""
     local remediation="계정별 용도를 파악한 후 불필요한 계정 삭제 [상세 조치 사례] l MSSQL Step 1\) 불필요한 계정 삭제 EXEC sp_droplogin '삭제할 계정';"
 
     status="수동점검"
-    detail="수동 점검 필요 항목입니다. 계정 정보를 확인하여 불필요한 계정이 없는 경우"
+    detail="계정 정보를 확인하여 불필요한 계정이 없는 경우"
     cur_state="수동점검 필요"
 
-    add_result "D-02" "DBMS > 1. 계정 관리" "데이터베이스의 불필요 계정을 제거하거나, 잠금설정 후 사용" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-D-02" "DBMS > 1. 계정 관리" "데이터베이스의 불필요 계정을 제거하거나, 잠금설정 후 사용" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# D-03: 비밀번호 사용 기간 및 복잡도를 기관의 정책에 맞도록 설정
-check_D_03() {
+# ISMS-D-03: 비밀번호 사용 기간 및 복잡도를 기관의 정책에 맞도록 설정
+check_ISMS_D_03() {
     local status="양호"
     local detail=""
     local cmd="수동점검 필요"
@@ -337,56 +635,103 @@ check_D_03() {
     detail="수동 점검 필요 항목입니다. 기관 정책에 맞게 비밀번호 사용 기간 및 복잡도 설정이 적용된 경우"
     cur_state="수동점검 필요"
 
-    add_result "D-03" "DBMS > 1. 계정 관리" "비밀번호 사용 기간 및 복잡도를 기관의 정책에 맞도록 설정" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-D-03" "DBMS > 1. 계정 관리" "비밀번호 사용 기간 및 복잡도를 기관의 정책에 맞도록 설정" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# D-04: 데이터베이스 관리자 권한을 꼭 필요한 계정 및 그룹에 대해서만 허용
-check_D_04() {
+# ISMS-D-04: 데이터베이스 관리자 권한을 꼭 필요한 계정 및 그룹에 대해서만 허용
+check_ISMS_D_04() {
     local status="양호"
     local detail=""
-    local cmd="수동점검 필요"
+    local cmd="EXEC sp_droprolemember 'user_name', 'sysadmin';"
     local cur_state=""
     local remediation="관리자 권한이 필요한 계정 및 그룹에만 관리자 권한 부여 [상세 조치 사례] l MSSQL Step 1\) sysadmin서버 역할의 계정 목록을 확인 후 서버 역할에 불필요한 계정이 있는 경우 서버 역할에서 삭제 EXEC sp_droprolemember 'user_name', 'sysadmin'; 예시\) EXEC sp_dropsrvrolemember 'user01', 'sysadmin'; \(user01계정을 sysadmin서버 역할에서 삭제\) [ 서버 역할에서 불필요 계정 삭제 예시 ]"
 
     status="수동점검"
-    detail="수동 점검 필요 항목입니다. 관리자 권한이 필요한 계정 및 그룹에만 관리자 권한이 부여된 경우"
+    detail="관리자 권한이 필요한 계정 및 그룹에만 관리자 권한이 부여된 경우"
     cur_state="수동점검 필요"
 
-    add_result "D-04" "DBMS > 1. 계정 관리" "데이터베이스 관리자 권한을 꼭 필요한 계정 및 그룹에 대해서만 허용" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-D-04" "DBMS > 1. 계정 관리" "데이터베이스 관리자 권한을 꼭 필요한 계정 및 그룹에 대해서만 허용" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# D-06: DB 사용자 계정을 개별적으로 부여하여 사용
-check_D_06() {
+# ISMS-D-06: DB 사용자 계정을 개별적으로 부여하여 사용
+check_ISMS_D_06() {
     local status="양호"
     local detail=""
-    local cmd="수동점검 필요"
+    local cmd="EXEC sp_droplogin ' ';; EXEC sp_adduser ' ', ' ', 'db_owner';; EXEC sp_adduser ' ', ' ', ' ';"
     local cur_state=""
     local remediation="사용자별 계정 생성 및 권한 부여 [상세 조치 사례] l MSSQL Step 1\) 공용계정 삭제 EXEC sp_droplogin '공용 계정'; 08. DBMS Step 2\) 사용자별, 응용 프로그램별 계정 생성 CREATE LOGIN '생성 계정' WITH PASSWORD = '비밀번호'; CREATE USER '생성 계정' FOR LOGIN '생성 계정' WITH DEFAULT_SCHEMA ='생성 계정'; ALTER USER '생성 계정'; EXEC sp_adduser '생성 계정', '생성 계정', 'db_owner'; EXEC sp_adduser '생성 계정', '생성 계정', '생성 계정'; EXEC sp_grantdbaccess '생성 계정', '생성 계정';"
 
     status="수동점검"
-    detail="수동 점검 필요 항목입니다. 사용자별 계정을 사용하고 있는 경우"
+    detail="사용자별 계정을 사용하고 있는 경우"
     cur_state="수동점검 필요"
 
-    add_result "D-06" "DBMS > 1. 계정 관리" "DB 사용자 계정을 개별적으로 부여하여 사용" "중" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-D-06" "DBMS > 1. 계정 관리" "DB 사용자 계정을 개별적으로 부여하여 사용" "중" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# D-08: 안전한 암호화 알고리즘 사용
-check_D_08() {
+# ISMS-D-08: 안전한 암호화 알고리즘 사용
+check_ISMS_D_08() {
     local status="양호"
     local detail=""
-    local cmd="수동점검 필요"
+    local cmd="select name, password_hash from sys.sql_logins;; USE"
     local cur_state=""
     local remediation="SHA-256 이상의 암호화 알고리즘 적용 [상세 조치 사례] l MSSQL Step 1\) 저장된 비밀번호 해시 값 확인 select name, password_hash from sys.sql_logins; ※ MSSQL 2012이상에서 사용자 계정의 비밀번호는 32bit Salt를 적용한 SHA-512 해시 알고리즘을 사용 [ 일반 이용자 패스워드 해시 알고리즘 변경 ] Step 1\) 데이터베이스 접속 USE <데이터베이스명> GO Step 1\) 열 추가 ALTER TABLE <테이블명> ADD <신규 해시 칼럼명> varbinary\(256\) GO Step 2\) 새로운 열에 암호화 된 데이터 저장 UPDATE <테이블명> SET <신규 해시 칼럼명> = HASHBYTES\('SHA2_256', <기존 해시 칼럼명>\) GO Step 3\) 기존 열 제거 ALTER TABLE <테이블명> DROP COLUMN <기존 해시 칼럼명> GO"
 
-    status="수동점검"
-    detail="수동 점검 필요 항목입니다. 해시 알고리즘 SHA-256 이상의 암호화 알고리즘을 사용하고 있는 경우"
-    cur_state="수동점검 필요"
+    local output
+    output=$({
+        ( run_mssql_query "select name, password_hash from sys.sql_logins;" )
+        ( USE )
+    } 2>/dev/null | sed '/^$/d' | head -20)
+    cur_state="$output"
 
-    add_result "D-08" "DBMS > 1. 계정 관리" "안전한 암호화 알고리즘 사용" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
+    if [ -z "$output" ]; then
+        status="N/A"
+        detail="명령 실행 결과 없음 또는 대상 미설치. "
+    else
+        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="해당 파일이 없으므로 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
+            local missing_text
+            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
+            status="수동점검"
+            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
+        else
+        if printf '%s\n' "$output" | grep -Eiq "md5|mysql_native_password|old_password|sha1"; then
+            status="취약"
+            detail="해시 알고리즘 SHA-256 미만의 암호화 알고리즘을 사용하고 있는 경우"
+        elif printf '%s\n' "$output" | grep -Eiq "sha-?256|caching_sha2_password|scram-sha-256|scram_sha_256"; then
+            status="양호"
+            detail="해시 알고리즘 SHA-256 이상의 암호화 알고리즘을 사용하고 있는 경우"
+        else
+            status="수동점검"
+            detail="해시 알고리즘 SHA-256 이상의 암호화 알고리즘을 사용하고 있는 경우"
+        fi
+        fi
+    fi
+    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
+
+    add_result "ISMS-D-08" "DBMS > 1. 계정 관리" "안전한 암호화 알고리즘 사용" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# D-11: DBA 이외의 인가되지 않은 사용자가 시스템 테이블에 접근할 수 없도록 설정
-check_D_11() {
+# ISMS-D-11: DBA 이외의 인가되지 않은 사용자가 시스템 테이블에 접근할 수 없도록 설정
+check_ISMS_D_11() {
     local status="양호"
     local detail=""
     local cmd="수동점검 필요"
@@ -397,11 +742,11 @@ check_D_11() {
     detail="수동 점검 필요 항목입니다. 시스템 테이블에 DBA만 접근 가능하도록 설정되어 있는 경우"
     cur_state="수동점검 필요"
 
-    add_result "D-11" "DBMS > 2. 접근 관리" "DBA 이외의 인가되지 않은 사용자가 시스템 테이블에 접근할 수 없도록 설정" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-D-11" "DBMS > 2. 접근 관리" "DBA 이외의 인가되지 않은 사용자가 시스템 테이블에 접근할 수 없도록 설정" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# D-16: Windows 인증 모드 사용
-check_D_16() {
+# ISMS-D-16: Windows 인증 모드 사용
+check_ISMS_D_16() {
     local status="양호"
     local detail=""
     local cmd="수동점검 필요"
@@ -412,26 +757,73 @@ check_D_16() {
     detail="수동 점검 필요 항목입니다. Windows 인증 모드를 사용하고 sa 계정이 비활성화되어 있는 경우"
     cur_state="수동점검 필요"
 
-    add_result "D-16" "DBMS > 2. 접근 관리" "Windows 인증 모드 사용" "하" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-D-16" "DBMS > 2. 접근 관리" "Windows 인증 모드 사용" "하" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# D-25: 주기적 보안 패치 및 벤더 권고 사항 적용
-check_D_25() {
+# ISMS-D-25: 주기적 보안 패치 및 벤더 권고 사항 적용
+check_ISMS_D_25() {
     local status="양호"
     local detail=""
-    local cmd="수동점검 필요"
+    local cmd="SELECT @@version; SELECT SERVERPROPERTY\(productversion\) AS ProductVersion, SERVERPROPERTY\(productlev"
     local cur_state=""
     local remediation="보안 패치가 적용된 버전으로 업데이트 [상세 조치 사례] l MSSQL Step 1\) 시스템에서 제품 버전 현황 확인 SELECT @@version 또는 SELECT SERVERPROPERTY\('productversion'\) AS ProductVersion, SERVERPROPERTY\('productlev el'\) AS ProductLevel, SERVERPROPERTY\('edition'\) AS Edition; Step 2\) MSSQL 최신 버전 확인 http://support.microsoft.com/kb/321185/en-uswnloads/index.html 664"
 
-    status="수동점검"
-    detail="수동 점검 필요 항목입니다. 보안 패치가 적용된 버전을 사용하는 경우"
-    cur_state="수동점검 필요"
+    local output
+    output=$({
+        ( run_mssql_query "SELECT @@version" )
+        ( run_mssql_query "SELECT SERVERPROPERTY\(productversion\) AS ProductVersion, SERVERPROPERTY\(productlev" )
+    } 2>/dev/null | sed '/^$/d' | head -20)
+    cur_state="$output"
 
-    add_result "D-25" "DBMS > 4. 패치 관리" "주기적 보안 패치 및 벤더 권고 사항 적용" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
+    if [ -z "$output" ]; then
+        status="N/A"
+        detail="명령 실행 결과 없음 또는 대상 미설치. "
+    else
+        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="해당 파일이 없으므로 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
+            local missing_text
+            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
+            status="수동점검"
+            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
+        else
+        if output_has_negative_marker "$output"; then
+            status="양호"
+            detail="보안 패치가 적용된 버전을 사용하는 경우"
+        elif output_has_positive_marker "$output"; then
+            status="취약"
+            detail="보안 패치가 적용되지 않는 버전을 사용하는 경우"
+        else
+            status="취약"
+            detail="보안 패치가 적용되지 않는 버전을 사용하는 경우"
+        fi
+        fi
+    fi
+    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
+
+    add_result "ISMS-D-25" "DBMS > 4. 패치 관리" "주기적 보안 패치 및 벤더 권고 사항 적용" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
-# D-26: 데이터베이스의 접근, 변경, 삭제 등의 감사 기록이 기관의 감사 기록 정책에 적합하도록 설정
-check_D_26() {
+# ISMS-D-26: 데이터베이스의 접근, 변경, 삭제 등의 감사 기록이 기관의 감사 기록 정책에 적합하도록 설정
+check_ISMS_D_26() {
     local status="양호"
     local detail=""
     local cmd="수동점검 필요"
@@ -442,7 +834,7 @@ check_D_26() {
     detail="수동 점검 필요 항목입니다. DBMS의 감사 로그 저장 정책이 수립되어 있으며, 정책 설정이 적용된 경우"
     cur_state="수동점검 필요"
 
-    add_result "D-26" "DBMS > 4. 패치 관리" "데이터베이스의 접근, 변경, 삭제 등의 감사 기록이 기관의 감사 기록 정책에 적합하도록 설정" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-D-26" "DBMS > 4. 패치 관리" "데이터베이스의 접근, 변경, 삭제 등의 감사 기록이 기관의 감사 기록 정책에 적합하도록 설정" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
 
@@ -462,24 +854,24 @@ progress() {
 }
 
 
-progress "CLD-MS-SQL-05"; check_CLD_MS_SQL_05
-progress "CLD-MS-SQL-06"; check_CLD_MS_SQL_06
-progress "CLD-MS-SQL-01"; check_CLD_MS_SQL_01
-progress "CLD-MS-SQL-02"; check_CLD_MS_SQL_02
-progress "CLD-MS-SQL-03"; check_CLD_MS_SQL_03
-progress "CLD-MS-SQL-04"; check_CLD_MS_SQL_04
-progress "CLD-MS-SQL-07"; check_CLD_MS_SQL_07
-progress "CLD-MS-SQL-08"; check_CLD_MS_SQL_08
-progress "D-01"; check_D_01
-progress "D-02"; check_D_02
-progress "D-03"; check_D_03
-progress "D-04"; check_D_04
-progress "D-06"; check_D_06
-progress "D-08"; check_D_08
-progress "D-11"; check_D_11
-progress "D-16"; check_D_16
-progress "D-25"; check_D_25
-progress "D-26"; check_D_26
+progress "CSAP-MS-SQL-05"; check_CSAP_MS_SQL_05
+progress "CSAP-MS-SQL-06"; check_CSAP_MS_SQL_06
+progress "CSAP-MS-SQL-01"; check_CSAP_MS_SQL_01
+progress "CSAP-MS-SQL-02"; check_CSAP_MS_SQL_02
+progress "CSAP-MS-SQL-03"; check_CSAP_MS_SQL_03
+progress "CSAP-MS-SQL-04"; check_CSAP_MS_SQL_04
+progress "CSAP-MS-SQL-07"; check_CSAP_MS_SQL_07
+progress "CSAP-MS-SQL-08"; check_CSAP_MS_SQL_08
+progress "ISMS-D-01"; check_ISMS_D_01
+progress "ISMS-D-02"; check_ISMS_D_02
+progress "ISMS-D-03"; check_ISMS_D_03
+progress "ISMS-D-04"; check_ISMS_D_04
+progress "ISMS-D-06"; check_ISMS_D_06
+progress "ISMS-D-08"; check_ISMS_D_08
+progress "ISMS-D-11"; check_ISMS_D_11
+progress "ISMS-D-16"; check_ISMS_D_16
+progress "ISMS-D-25"; check_ISMS_D_25
+progress "ISMS-D-26"; check_ISMS_D_26
 
 echo ""
 echo ""

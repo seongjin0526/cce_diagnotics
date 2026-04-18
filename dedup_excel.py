@@ -13,10 +13,12 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
-BASE_DIR = '/home/seongjin0526/cce_vuln_check'
-CLOUD_PDF = f'{BASE_DIR}/클라우드 취약점 점검 가이드(2024).pdf'
-MAIN_PDF = f'{BASE_DIR}/주요정보통신기반시설 기술적 취약점 분석·평가 방법 상세가이드.pdf'
-OUTPUT_FILE = f'{BASE_DIR}/진단항목통합.xlsx'
+from code_scheme import make_cloud_control_code, to_preferred_code_text
+from project_paths import CLOUD_GUIDE_PDF, MAIN_GUIDE_PDF, MERGED_ITEMS_XLSX
+
+CLOUD_PDF = str(CLOUD_GUIDE_PDF)
+MAIN_PDF = str(MAIN_GUIDE_PDF)
+OUTPUT_FILE = MERGED_ITEMS_XLSX
 
 CLOUD_OFFSET = 5
 
@@ -472,7 +474,7 @@ def build_main_item_for_app(item, app_name, app_config):
     remediation = '\n'.join(remed_parts)
 
     return {
-        'code': item['code'],
+        'code': to_preferred_code_text(item['code']),
         'severity': item['severity'],
         'name': item['name'],
         'category': item['category'],
@@ -516,7 +518,7 @@ def find_best_match(cloud_item, main_items, used):
 
 
 def merge_items(ci, mi):
-    code = f"{ci['code']} / {mi['code']}"
+    code = f"{to_preferred_code_text(ci['code'])} / {to_preferred_code_text(mi['code'])}"
     severity = mi.get('severity', '-')
     name = ci['name']
     category = ci.get('category', '') or mi.get('category', '')
@@ -722,8 +724,7 @@ def main():
 
         # Assign codes to cloud items
         for idx, item in enumerate(ci, 1):
-            code_app = app.replace('(', '').replace(')', '').replace(' ', '')
-            item['code'] = f"CLD-{code_app}-{idx:02d}"
+            item['code'] = make_cloud_control_code(app, idx)
             item['severity'] = '-'
 
         all_data[app] = {'cloud': ci, 'main': mi}

@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
 *.pdf
+.codex
+instance/
 cce_check_result_*.json
 test_result.json
 test_new_result.json

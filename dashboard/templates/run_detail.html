@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}진단 실행 {{ run.id }}{% endblock %}
+{% block head_extra %}
+  {% if auto_refresh %}
+  <meta http-equiv="refresh" content="5">
+  {% endif %}
+{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <div>
+      <h1>진단 실행 #{{ run.id }}</h1>
+      <p class="dim">{{ run.host_name }} / {{ run.app_key }} / {{ run.started_at }} / {{ run.status }}</p>
+    </div>
+    <a class="button-link" href="{{ url_for('main.export_run', run_id=run.id, status=request.args.get('status', ''), source=request.args.get('source', ''), framework=request.args.get('framework', ''), q=request.args.get('q', '')) }}">엑셀 내보내기</a>
+  </div>
+  <div class="run-meta">
+    <div><strong>실행 스크립트</strong><span>{{ run.executed_script_path or '-' }}</span></div>
+    <div><strong>실행 셸</strong><span>{{ run.executed_shell or '-' }}</span></div>
+    <div><strong>프레임워크 범위</strong><span>{{ run.framework_scope or '-' }}</span></div>
+  </div>
+  {% if auto_refresh %}
+  <div class="flash flash-success">진단이 아직 진행 중이라 5초마다 자동 새로고침합니다.</div>
+  {% endif %}
+  {% if run.error_message %}
+  <details>
+    <summary>오류 / 경고</summary>
+    <pre>{{ run.error_message }}</pre>
+  </details>
+  {% endif %}
+  {% if run.execution_log %}
+  <details>
+    <summary>실행 로그</summary>
+    <pre>{{ run.execution_log }}</pre>
+  </details>
+  {% endif %}
+</section>
+
+<section class="grid-summary">
+  {% for status, count in counts.items() %}
+  <article class="summary-card"><span>{{ status }}</span><strong>{{ count }}</strong></article>
+  {% endfor %}
+</section>
+
+<section class="panel">
+  <form method="get" class="filter-form">
+    <label>최종판정
+      <select name="status">
+        <option value="">전체</option>
+        {% for option in ['양호', '취약', '예외', 'N/A', '수동점검'] %}
+        <option value="{{ option }}" {{ 'selected' if request.args.get('status') == option else '' }}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>출처
+      <select name="source">
+        <option value="">전체</option>
+        {% for option in ['클라우드', '기반시설', '공통', '통합'] %}
+        <option value="{{ option }}" {{ 'selected' if request.args.get('source') == option else '' }}>{{ option }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>프레임워크
+      <select name="framework">
+        <option value="">전체</option>
+        {% for framework in framework_options %}
+        <option value="{{ framework }}" {{ 'selected' if request.args.get('framework') == framework else '' }}>{{ framework }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>검색<input type="text" name="q" value="{{ request.args.get('q', '') }}" placeholder="코드, 항목명, 판단근거"></label>
+    <button type="submit">필터</button>
+  </form>
+</section>
+
+<section class="panel">
+  <table class="dense-table">
+    <thead>
+      <tr>
+        <th>코드</th><th>항목</th><th>원본판정</th><th>최종판정</th><th>프레임워크</th><th>수행명령 / 결과값</th><th>조치</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for result in results %}
+      <tr>
+        <td>{{ result.code }}</td>
+        <td>
+          <strong>{{ result.title }}</strong>
+          <div class="dim small">{{ result.category }} / {{ result.source }}</div>
+          {% if result.diagnosis %}
+          <details>
+            <summary>진단방법</summary>
+            <pre>{{ result.diagnosis }}</pre>
+          </details>
+          {% endif %}
+          {% if result.request %}
+          <div class="approval-box">
+            <span class="badge {{ result.request.status|status_badge }}">{{ result.request.status }}</span>
+            <span>예외 사유: {{ result.request.reason }}</span>
+          </div>
+          {% endif %}
+        </td>
+        <td><span class="badge {{ result.script_status|status_badge }}">{{ result.script_status }}</span></td>
+        <td>
+          <span class="badge {{ result.effective_status|status_badge }}">{{ result.effective_status }}</span>
+          {% if result.status_note %}
+          <div class="dim small">{{ result.status_note }}</div>
+          {% endif %}
+        </td>
+        <td>{{ ', '.join(result.frameworks) or '-' }}</td>
+        <td>
+          <div class="dim small">수행 명령</div>
+          <div class="pre small">{{ result.command or '-' }}</div>
+          <div class="dim small">결과값</div>
+          <div class="pre small">{{ result.current_state or '-' }}</div>
+          <div class="dim small">판단 근거</div>
+          <div class="pre small">{{ result.detail or '-' }}</div>
+          {% if result.command == '수동점검 필요' and result.current_state == '수동점검 필요' %}
+          <div class="dim small">구버전 실행 이력입니다. 재실행 후 실제 수행 명령과 결과값이 반영됩니다.</div>
+          {% endif %}
+        </td>
+        <td>
+          <div class="pre small">{{ result.remediation or '-' }}</div>
+          {% if g.user['role'] == 'security' %}
+          <form method="post" action="{{ url_for('main.override_result', result_id=result.id) }}" class="inline-form">
+            <select name="final_status">
+              <option value="">원본 유지</option>
+              {% for option in ['양호', '취약', 'N/A', '수동점검', '예외'] %}
+              <option value="{{ option }}">{{ option }}</option>
+              {% endfor %}
+            </select>
+            <input type="text" name="status_note" placeholder="판정 메모">
+            <button type="submit">저장</button>
+          </form>
+          {% else %}
+          <form method="post" action="{{ url_for('main.request_exception', result_id=result.id) }}" class="inline-form">
+            <input type="text" name="reason" placeholder="예외 요청 사유" required>
+            <button type="submit">예외 요청</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7">조건에 맞는 결과가 없습니다.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

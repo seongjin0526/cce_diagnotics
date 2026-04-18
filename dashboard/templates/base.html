@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}CCE Dashboard{% endblock %}</title>
+  {% block head_extra %}{% endblock %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <a class="brand" href="{{ url_for('main.index') }}">CCE Dashboard</a>
+      <p class="subtitle">원격 탐지, 진단 수행, 예외 승인, 가이드 카탈로그</p>
+    </div>
+    {% if g.user %}
+    <nav class="nav">
+      <a href="{{ url_for('main.index') }}">대시보드</a>
+      <a href="{{ url_for('main.hosts') }}">호스트</a>
+      <a href="{{ url_for('main.controls') }}">취약점 카탈로그</a>
+      {% if g.user['role'] == 'security' %}
+      <a href="{{ url_for('main.approvals') }}">예외 승인</a>
+      {% endif %}
+      <span class="user-pill">{{ g.user['username'] }} / {{ '보안담당자' if g.user['role'] == 'security' else '일반사용자' }}</span>
+      <a href="{{ url_for('main.logout') }}">로그아웃</a>
+    </nav>
+    {% endif %}
+  </header>
+
+  <main class="page">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <section class="flash-stack">
+          {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </section>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

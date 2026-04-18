@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}예외 승인{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>예외 승인 대기</h1>
+  <table>
+    <thead>
+      <tr><th>상태</th><th>호스트</th><th>항목</th><th>요청자</th><th>사유</th><th>처리</th></tr>
+    </thead>
+    <tbody>
+      {% for row in requests %}
+      <tr>
+        <td><span class="badge {{ row.status|status_badge }}">{{ row.status }}</span></td>
+        <td>{{ row.host_name }}</td>
+        <td>{{ row.code }} / {{ row.title }}</td>
+        <td>{{ row.requester_name }}</td>
+        <td>{{ row.reason }}</td>
+        <td>
+          {% if row.status == 'pending' %}
+          <form method="post" action="{{ url_for('main.approval_decision', request_id=row.id) }}" class="inline-form">
+            <select name="decision">
+              <option value="approved">승인</option>
+              <option value="rejected">반려</option>
+            </select>
+            <input type="text" name="approver_comment" placeholder="검토 메모">
+            <button type="submit">처리</button>
+          </form>
+          {% else %}
+          <span class="dim">{{ row.decided_at or '-' }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">예외 요청이 없습니다.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

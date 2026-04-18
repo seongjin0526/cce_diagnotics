@@ -1,0 +1,4 @@
+interface:
+  display_name: "CCE Script Developer"
+  short_description: "Develop CCE scripts with stronger auto judgement"
+  default_prompt: "Use $cce-script-developer to update generated CCE checks so command-checkable items produce 양호 or 취약 instead of 수동점검 when possible."

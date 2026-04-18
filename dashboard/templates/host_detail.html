@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}호스트 {{ host.name }}{% endblock %}
+{% block head_extra %}
+  {% if auto_refresh %}
+  <meta http-equiv="refresh" content="5">
+  {% endif %}
+{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="panel-header">
+    <div>
+      <h1>{{ host.name }}</h1>
+      <p class="dim">{{ host.address }}:{{ host.port }} / {{ host.transport }} / {{ host.shell_type }}</p>
+    </div>
+    <form method="post" action="{{ url_for('main.run_discovery', host_id=host.id) }}">
+      <button type="submit">애플리케이션 탐지 실행</button>
+    </form>
+  </div>
+  {% if host.notes %}
+  <p>{{ host.notes }}</p>
+  {% endif %}
+  {% if auto_refresh %}
+  <div class="flash flash-success">실행 중인 작업이 있어 5초마다 자동 새로고침합니다.</div>
+  {% endif %}
+</section>
+
+<section class="layout-two">
+  <article class="panel">
+    <h2>실행 지원 매트릭스</h2>
+    <table>
+      <thead>
+        <tr><th>애플리케이션</th><th>지원 여부</th><th>설명</th><th>통제수</th></tr>
+      </thead>
+      <tbody>
+        {% for item in support_matrix %}
+        <tr>
+          <td>{{ item.app_key }}</td>
+          <td><span class="badge {{ 'status-good' if item.supported else 'status-na' }}">{{ '지원' if item.supported else '미지원' }}</span></td>
+          <td>{{ item.reason }}</td>
+          <td>{{ item.controls_count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </article>
+
+  <article class="panel">
+    <h2>탐지 결과</h2>
+    {% if latest_discovery %}
+      <p class="dim">실행시각 {{ latest_discovery.started_at }} / 상태 {{ latest_discovery.status }}</p>
+      <table>
+        <thead>
+          <tr><th>애플리케이션</th><th>탐지</th><th>근거</th><th>통제수</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for item in discovery_results %}
+          <tr>
+            <td>{{ item.app_key }}</td>
+            <td><span class="badge {{ 'status-good' if item.detected else 'status-na' }}">{{ '탐지됨' if item.detected else '미탐지' }}</span></td>
+            <td>{{ item.evidence or '-' }}</td>
+            <td>{{ controls_count.get(item.app_key, 0) }}</td>
+            <td>
+              {% if item.detected %}
+              <form method="post" action="{{ url_for('main.start_assessment', host_id=host.id, app_key=item.app_key) }}">
+                <button type="submit">진단 실행</button>
+              </form>
+              {% else %}
+              -
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p>아직 탐지 이력이 없습니다.</p>
+    {% endif %}
+  </article>
+
+  <article class="panel">
+    <h2>최근 진단</h2>
+    <table>
+      <thead>
+        <tr><th>ID</th><th>애플리케이션</th><th>상태</th><th>시작시각</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for run in assessment_runs %}
+        <tr>
+          <td>{{ run.id }}</td>
+          <td>{{ run.app_key }}</td>
+          <td><span class="badge {{ run.status|status_badge }}">{{ run.status }}</span></td>
+          <td>{{ run.started_at }}</td>
+          <td><a href="{{ url_for('main.run_detail', run_id=run.id) }}">결과</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">진단 이력이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </article>
+</section>
+
+<section class="panel" id="paths">
+  <div class="panel-header">
+    <div>
+      <h2>앱 경로 / 설정 오버라이드</h2>
+      <p class="dim">탐지 스크립트가 찾은 경로를 저장하고, 필요하면 사용자가 직접 덮어쓸 수 있습니다. 진단 실행 시 수동값이 자동탐지값보다 우선합니다.</p>
+    </div>
+  </div>
+  <div class="path-grid">
+    {% for item in app_settings_cards %}
+    <article class="setup-box">
+      <div class="panel-header">
+        <div>
+          <strong>{{ item.app.display_name }}</strong>
+          <div class="dim small">{{ item.support_reason }}</div>
+        </div>
+        {% if item.last_detected_at %}
+        <span class="dim small">최근 탐지 {{ item.last_detected_at }}</span>
+        {% endif %}
+      </div>
+      <form method="post" action="{{ url_for('main.save_host_app_settings', host_id=host.id, app_key=item.app.key) }}" class="stack-form compact-form">
+        {% for setting in item.app.path_settings %}
+        <label>{{ setting.label }}
+          <input
+            type="text"
+            name="{{ setting.env_var }}"
+            value="{{ item.manual_paths.get(setting.env_var, '') }}"
+            placeholder="{{ item.detected_paths.get(setting.env_var, setting.placeholder) }}"
+          >
+        </label>
+        <div class="dim small">
+          <code>{{ setting.env_var }}</code>
+          {% if item.detected_paths.get(setting.env_var) %}
+          / 자동 탐지: <span class="path-value">{{ item.detected_paths.get(setting.env_var) }}</span>
+          {% endif %}
+          {% if setting.help_text %}
+          / {{ setting.help_text }}
+          {% endif %}
+        </div>
+        {% endfor %}
+        <button type="submit" {{ 'disabled' if not item.supported else '' }}>오버라이드 저장</button>
+      </form>
+    </article>
+    {% else %}
+    <p>경로 오버라이드를 지원하는 애플리케이션 정의가 아직 없습니다.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

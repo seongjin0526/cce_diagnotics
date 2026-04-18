@@ -1,0 +1,5 @@
+interface:
+  display_name: "CCE Maintainer"
+  short_description: "Maintain the CCE repo workflow and harness"
+  default_prompt: "Use $cce-maintainer to regenerate CCE artifacts, validate the repo, and keep the AI harness aligned."
+  brand_color: "#1F6F8B"

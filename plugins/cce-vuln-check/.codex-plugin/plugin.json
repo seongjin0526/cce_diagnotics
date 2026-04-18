@@ -1,0 +1,42 @@
+{
+  "name": "cce-vuln-check",
+  "version": "0.1.0",
+  "description": "Repo-local Codex plugin for the CCE vulnerability-check workflow and AI harness.",
+  "author": {
+    "name": "Local Repository",
+    "email": "noreply@example.invalid",
+    "url": "https://example.invalid/cce-vuln-check"
+  },
+  "homepage": "https://example.invalid/cce-vuln-check",
+  "repository": "https://example.invalid/cce-vuln-check",
+  "license": "UNLICENSED",
+  "keywords": [
+    "cce",
+    "security",
+    "dashboard",
+    "codex",
+    "repo-workflow"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "CCE Vuln Check",
+    "shortDescription": "Maintain the CCE repo workflow and AI harness",
+    "longDescription": "Repo-local Codex plugin for regenerating CCE artifacts, validating dashboard and script changes, and maintaining this repository's AI harness.",
+    "developerName": "Local Repository",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://example.invalid/cce-vuln-check",
+    "privacyPolicyURL": "https://example.invalid/privacy",
+    "termsOfServiceURL": "https://example.invalid/terms",
+    "defaultPrompt": [
+      "Regenerate the CCE artifacts and run the Codex harness",
+      "Update the dashboard flow and validate the repository",
+      "Maintain the repo-local skill and plugin setup"
+    ],
+    "brandColor": "#1F6F8B",
+    "screenshots": []
+  }
+}

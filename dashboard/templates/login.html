@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}로그인{% endblock %}
+{% block content %}
+<section class="login-card">
+  <h1>대시보드 로그인</h1>
+  <p>일반사용자는 탐지/진단과 예외요청을 수행하고, 보안담당자는 예외승인과 최종판정을 수행합니다.</p>
+  <form method="post" class="stack-form">
+    <label>아이디<input type="text" name="username" required></label>
+    <label>비밀번호<input type="password" name="password" required></label>
+    <button type="submit">로그인</button>
+  </form>
+  <div class="setup-box">
+    <p>초기 DB와 계정이 없으면 아래를 한 번 실행합니다.</p>
+    <div class="code-block">python3 run_dashboard.py init-db<br>python3 run_dashboard.py create-user security security123! security<br>python3 run_dashboard.py create-user operator operator123! user</div>
+  </div>
+</section>
+{% endblock %}

@@ -7,11 +7,12 @@ CCE 취약점 항목 통합 추출 스크립트
 import fitz
 import re
 import json
-import os
 
-BASE_DIR = '/home/seongjin0526/cce_vuln_check'
-CLOUD_PDF = os.path.join(BASE_DIR, '클라우드 취약점 점검 가이드(2024).pdf')
-MAIN_PDF = os.path.join(BASE_DIR, '주요정보통신기반시설 기술적 취약점 분석·평가 방법 상세가이드.pdf')
+from code_scheme import to_preferred_code_text
+from project_paths import CLOUD_GUIDE_PDF, CLOUD_ITEMS_JSON, MAIN_GUIDE_PDF, MAIN_ITEMS_JSON
+
+CLOUD_PDF = str(CLOUD_GUIDE_PDF)
+MAIN_PDF = str(MAIN_GUIDE_PDF)
 
 # Cloud guide: content page -> PDF page offset is 5
 CLOUD_OFFSET = 5
@@ -379,7 +380,7 @@ def parse_main_items(text, chapter_name):
             detail = re.sub(r'\d{2}\.\s*(Unix|Windows).*?\n', '', detail)
 
         items.append({
-            'code': code,
+            'code': to_preferred_code_text(code),
             'severity': severity,
             'name': item_name,
             'category': category_path,
@@ -416,7 +417,7 @@ def main():
     cloud_doc.close()
 
     # Save cloud data for inspection
-    with open(os.path.join(BASE_DIR, 'cloud_items.json'), 'w', encoding='utf-8') as f:
+    with CLOUD_ITEMS_JSON.open('w', encoding='utf-8') as f:
         json.dump(cloud_data, f, ensure_ascii=False, indent=2)
     print(f"\n클라우드 가이드: 총 {sum(len(v) for v in cloud_data.values())}개 항목 추출 완료")
 
@@ -437,13 +438,13 @@ def main():
     main_doc.close()
 
     # Save main data for inspection
-    with open(os.path.join(BASE_DIR, 'main_items.json'), 'w', encoding='utf-8') as f:
+    with MAIN_ITEMS_JSON.open('w', encoding='utf-8') as f:
         json.dump(main_data, f, ensure_ascii=False, indent=2)
     print(f"\n주요정보통신기반시설: 총 {sum(len(v) for v in main_data.values())}개 항목 추출 완료")
 
     print("\n[완료] JSON 파일 저장됨:")
-    print(f"  - {os.path.join(BASE_DIR, 'cloud_items.json')}")
-    print(f"  - {os.path.join(BASE_DIR, 'main_items.json')}")
+    print(f"  - {CLOUD_ITEMS_JSON}")
+    print(f"  - {MAIN_ITEMS_JSON}")
 
 
 if __name__ == '__main__':

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}호스트 관리{% endblock %}
+{% block content %}
+<section class="layout-two">
+  <article class="panel">
+    <h2>호스트 등록</h2>
+    <form method="post" class="stack-form">
+      <label>표시 이름<input type="text" name="name" required></label>
+      <label>주소 또는 별칭<input type="text" name="address" required></label>
+      <label>포트<input type="number" name="port" value="22" required></label>
+      <label>원격 사용자<input type="text" name="remote_user" placeholder="ssh user"></label>
+      <label>전송방식
+        <select name="transport">
+          <option value="ssh">ssh</option>
+          <option value="local">local</option>
+          <option value="compose">compose</option>
+        </select>
+      </label>
+      <label class="inline-check"><input type="checkbox" name="use_sudo"> sudo로 진단 스크립트 실행</label>
+      <label>메모<textarea name="notes" rows="4"></textarea></label>
+      <button type="submit">호스트 저장</button>
+    </form>
+    <p class="dim">현재 대시보드는 Linux/Unix POSIX 호스트만 등록 대상으로 가정합니다. `compose`는 `docker/test-lab/compose.yml` 서비스명을 주소에 넣어 테스트 랩 컨테이너를 직접 진단할 때 사용합니다.</p>
+  </article>
+
+  <article class="panel">
+    <h2>등록 호스트</h2>
+    <table>
+      <thead>
+        <tr><th>이름</th><th>주소</th><th>전송방식</th><th>마지막 탐지</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for host in hosts %}
+        <tr>
+          <td>{{ host.name }}</td>
+          <td>{{ host.address }}:{{ host.port }}</td>
+          <td>{{ host.transport }} / {{ host.shell_type }}</td>
+          <td>{{ host.last_discovery_at or '-' }}</td>
+          <td><a href="{{ url_for('main.host_detail', host_id=host.id) }}">열기</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">호스트가 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </article>
+</section>
+{% endblock %}

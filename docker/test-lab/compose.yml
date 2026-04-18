@@ -1,0 +1,172 @@
+name: cce-test-lab
+
+services:
+  apache-lab:
+    image: httpd:2.4-bookworm
+    profiles: ["common", "web"]
+    ports:
+      - "18080:80"
+    volumes:
+      - ../../:/workspace:ro
+
+  nginx-lab:
+    image: nginx:1.27-bookworm
+    profiles: ["common", "web"]
+    command: ["nginx", "-g", "daemon off;", "-c", "/opt/cce/nginx/nginx.conf"]
+    ports:
+      - "18081:80"
+    volumes:
+      - ../../:/workspace:ro
+      - ./configs/nginx/nginx.conf:/opt/cce/nginx/nginx.conf:ro
+
+  tomcat-lab:
+    image: tomcat:10.1-jdk21-temurin
+    profiles: ["common", "web"]
+    ports:
+      - "18082:8080"
+    volumes:
+      - ../../:/workspace:ro
+
+  php-lab:
+    image: php:8.3-cli-bookworm
+    profiles: ["common", "runtime"]
+    command:
+      [
+        "bash",
+        "-lc",
+        "php -S 0.0.0.0:8080 -c /opt/cce/php/php.ini -t /workspace/docker/test-lab/fixtures/php",
+      ]
+    ports:
+      - "18083:8080"
+    volumes:
+      - ../../:/workspace:ro
+      - ./configs/php/php.ini:/opt/cce/php/php.ini:ro
+
+  nodejs-lab:
+    image: node:20-bookworm
+    profiles: ["common", "runtime"]
+    command: ["node", "/workspace/docker/test-lab/fixtures/node/server.js"]
+    ports:
+      - "18084:3000"
+    volumes:
+      - ../../:/workspace:ro
+
+  mysql-lab:
+    image: mysql:8.4
+    profiles: ["common", "db"]
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_DATABASE: cce_lab
+    command: ["mysqld", "--defaults-file=/opt/cce/mysql/my.cnf", "--user=mysql"]
+    ports:
+      - "13306:3306"
+    volumes:
+      - ../../:/workspace:ro
+      - ./configs/mysql/my.cnf:/opt/cce/mysql/my.cnf:ro
+      - mysql-lab-data:/var/lib/mysql
+
+  postgresql-lab:
+    image: postgres:16-bookworm
+    profiles: ["common", "db"]
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_DB: cce_lab
+      PGDATA: /opt/cce/postgresql/data
+    ports:
+      - "15432:5432"
+    volumes:
+      - ../../:/workspace:ro
+      - postgres-lab-data:/opt/cce/postgresql/data
+
+  redis-lab:
+    image: redis:7-bookworm
+    profiles: ["common", "db"]
+    command: ["redis-server", "/opt/cce/redis/redis.conf"]
+    ports:
+      - "16379:6379"
+    volumes:
+      - ../../:/workspace:ro
+      - ./configs/redis/redis.conf:/opt/cce/redis/redis.conf:ro
+
+  mongodb-lab:
+    image: mongo:7
+    profiles: ["common", "db"]
+    command: ["mongod", "--config", "/opt/cce/mongodb/mongod.conf"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - ../../:/workspace:ro
+      - ./configs/mongodb/mongod.conf:/opt/cce/mongodb/mongod.conf:ro
+      - mongodb-lab-data:/data/db
+
+  elasticsearch-lab:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    profiles: ["common", "db"]
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "19200:9200"
+    volumes:
+      - ../../:/workspace:ro
+      - ./configs/elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+      - elasticsearch-lab-data:/usr/share/elasticsearch/data
+
+  mssql-lab:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    profiles: ["extended", "db"]
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "CceLab123!"
+      MSSQL_PID: Developer
+    ports:
+      - "11433:1433"
+    volumes:
+      - ../../:/workspace:ro
+
+  docker-lab:
+    image: docker:27-dind
+    profiles: ["extended", "platform"]
+    privileged: true
+    command: ["dockerd", "--config-file=/opt/cce/docker/daemon.json"]
+    ports:
+      - "12375:2375"
+    volumes:
+      - ../../:/workspace:ro
+      - ./configs/docker/daemon.json:/opt/cce/docker/daemon.json:ro
+      - docker-lab-data:/var/lib/docker
+
+  k3s-server-lab:
+    image: rancher/k3s:v1.30.3-k3s1
+    profiles: ["extended", "platform"]
+    privileged: true
+    command: ["server", "--disable=traefik", "--write-kubeconfig-mode=644"]
+    environment:
+      K3S_TOKEN: cce-lab-token
+    ports:
+      - "16443:6443"
+    volumes:
+      - ../../:/workspace:ro
+      - k3s-server-data:/var/lib/rancher/k3s
+
+  k3s-agent-lab:
+    image: rancher/k3s:v1.30.3-k3s1
+    profiles: ["extended", "platform"]
+    privileged: true
+    depends_on:
+      - k3s-server-lab
+    command: ["agent"]
+    environment:
+      K3S_URL: https://k3s-server-lab:6443
+      K3S_TOKEN: cce-lab-token
+    volumes:
+      - ../../:/workspace:ro
+
+volumes:
+  mysql-lab-data:
+  postgres-lab-data:
+  mongodb-lab-data:
+  elasticsearch-lab-data:
+  docker-lab-data:
+  k3s-server-data:

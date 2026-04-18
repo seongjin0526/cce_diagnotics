@@ -1,7 +1,7 @@
 # CCE 취약점 진단 스크립트
 
 주요정보통신기반시설 기술적 취약점 분석·평가 방법 상세가이드(2026)와 클라우드 취약점 점검 가이드(2024)를 기반으로 한 자동화 진단 스크립트 모음입니다.
-**모든 코드는 claude로만 작성했습니다.**
+저장소는 `PDF -> JSON -> Excel -> 플랫폼별 진단 스크립트` 흐름으로 구성되어 있으며, Codex 기준의 반복 검증 하네스를 포함합니다.
 
 21개 애플리케이션에 대해 **총 475개 CCE 항목**을 점검하며, 결과를 JSON 파일로 출력합니다.
 
@@ -386,7 +386,7 @@ sudo bash scripts/ceph_cce_check.sh result_ceph.json
   },
   "results": [
     {
-      "code": "U-01",
+      "code": "ISMS-U-01",
       "category": "계정 관리",
       "title": "root 계정 원격 접속 제한",
       "importance": "상",
@@ -405,7 +405,7 @@ sudo bash scripts/ceph_cce_check.sh result_ceph.json
 
 | 필드 | 설명 |
 |---|---|
-| `code` | 항목 번호 (예: U-01, CLD-Docker-01, W-03) |
+| `code` | 항목 번호 (예: ISMS-U-01, CSAP-Docker-01, ISMS-W-03) |
 | `category` | 항목 분류 (계정 관리, 보안 설정 등) |
 | `title` | 항목명 |
 | `importance` | 중요도 (상/중/하 또는 -) |
@@ -420,6 +420,79 @@ sudo bash scripts/ceph_cce_check.sh result_ceph.json
 
 ---
 
+## Codex 작업 흐름
+
+### 기본 재생성 순서
+
+```bash
+python3 extract_cce.py
+python3 dedup_excel.py
+python3 generate_scripts.py
+python3 tools/codex_harness.py
+```
+
+- `extract_cce.py`: 원본 PDF에서 `cloud_items.json`, `main_items.json` 생성
+- `dedup_excel.py`: 플랫폼 필터링과 중복 제거를 적용해 `진단항목통합.xlsx` 생성
+- `generate_scripts.py`: Excel 데이터를 기반으로 `scripts/` 하위 진단 스크립트 생성
+- `tools/codex_harness.py`: Python/JSON/Shell 문법, 절대경로, 레거시 AI 흔적을 점검
+
+### 참고 사항
+
+- `generate_excel.py`는 비교용으로 남겨둔 기존 Excel 생성 경로이며, 기본 재생성은 `dedup_excel.py`를 우선 사용합니다.
+- `linux_cce_check.sh`는 수동 관리 기준 스크립트이고, `scripts/` 하위 파일은 생성기 중심으로 관리하는 것이 안전합니다.
+- 경로 하드코딩은 `project_paths.py`에서 통합 관리합니다.
+
+---
+
+## 대시보드 하네스
+
+Flask 기반 대시보드 하네스를 추가했습니다. 주요 기능은 아래와 같습니다.
+
+- 호스트 등록 후 `local` 또는 `ssh` 방식으로 애플리케이션 탐지
+- 탐지된 애플리케이션 기준으로 기존 CCE 진단 스크립트 원격 실행
+- 탐지/진단 요청 시 백그라운드 큐로 넘기고 상태를 자동 새로고침으로 추적
+- 호스트별 실행 지원 매트릭스로 현재 하네스에서 실행 가능한 스크립트 범위 표시
+- 탐지 시 앱별 설정 파일/설치 경로를 같이 수집하고 호스트별로 저장
+- 호스트 상세 화면에서 자동 탐지 경로와 수동 오버라이드를 함께 관리
+- 결과별 원본 판정, 최종 판정, 수행 명령, 현재 상태, 조치방법 조회
+- 일반사용자 예외 요청, 보안담당자 예외 승인 및 최종 판정
+- 결과 필터링 후 Excel 다운로드
+- 통제 카탈로그에서 항목, 진단방법, 조치방법, 프레임워크 태그 조회
+
+### 실행
+
+```bash
+python3 run_dashboard.py init-db
+python3 run_dashboard.py create-user security security123! security
+python3 run_dashboard.py create-user operator operator123! user
+python3 run_dashboard.py serve --host 0.0.0.0 --port 5001
+```
+
+기본 URL은 `http://127.0.0.1:5001`입니다.
+
+### 현재 지원 범위
+
+- 현재 대시보드 운영 범위는 Linux/Unix POSIX 호스트 우선입니다.
+- 원격 탐지/실행은 SSH 키 기반 POSIX 호스트를 우선 지원합니다.
+- 앱별 경로값은 `자동 탐지 -> 저장 -> 수동 오버라이드` 순서로 적용되며, 진단 실행 시 수동값이 우선합니다.
+- Windows PowerShell 원격 실행은 저장소 자산만 유지하고 있고, 대시보드 운영 경로에서는 아직 제외했습니다.
+- `공공CSAP`, `ISMS-P` 표시는 현재 저장소의 기존 출처 값을 기반으로 한 초기 매핑입니다. 실제 심사 기준용으로 사용하려면 내부 기준서에 맞춘 매핑 보정이 필요합니다.
+
+### Docker 테스트 랩
+
+컨테이너로 재현 가능한 Linux 대상은 `docker/test-lab/` 아래 compose 랩으로 검증할 수 있습니다.
+
+```bash
+docker compose -f docker/test-lab/compose.yml --profile common up -d
+docker/test-lab/run_check.sh nginx-lab Nginx
+```
+
+- 대상별 랩 모드 표: `docker/test-lab/targets.md`
+- 사용법: `docker/test-lab/README.md`
+- 하이퍼바이저, Windows, 일부 분산 스택은 컨테이너 대신 VM/물리 장비 테스트 호스트로 분리합니다.
+
+---
+
 ## 스크립트 재생성
 
 `진단항목통합.xlsx`의 데이터가 변경된 경우, 스크립트를 재생성할 수 있습니다.
@@ -431,17 +504,29 @@ python3 generate_scripts.py
 
 `scripts/` 디렉토리에 20개 스크립트가 새로 생성됩니다.
 
+변경 검증은 아래 하네스로 수행합니다.
+
+```bash
+python3 tools/codex_harness.py
+```
+
 ---
 
 ## 프로젝트 구조
 
 ```
+├── AGENTS.md                    # Codex용 저장소 작업 가이드
+├── dashboard/                   # Flask 대시보드 앱
 ├── linux_cce_check.sh          # Linux 진단 스크립트 (수동 작성)
+├── project_paths.py            # 저장소 상대 경로 상수
+├── run_dashboard.py            # 대시보드 실행 / DB 초기화 / 사용자 생성
+├── tools/
+│   └── codex_harness.py        # Codex 검증 하네스
 ├── generate_scripts.py         # 스크립트 자동 생성기
 ├── 진단항목통합.xlsx            # 475개 CCE 항목 데이터 소스
 ├── extract_cce.py              # PDF → JSON 추출기
-├── generate_excel.py           # JSON → Excel 변환기
-├── dedup_excel.py              # 중복 제거 처리기
+├── generate_excel.py           # 기존 Excel 생성기
+├── dedup_excel.py              # 기본 Excel 생성기 (필터링 + 중복 제거)
 ├── cloud_items.json            # 클라우드 가이드 추출 데이터
 ├── main_items.json             # 기반시설 가이드 추출 데이터
 └── scripts/                    # 자동 생성된 진단 스크립트 (20개)
