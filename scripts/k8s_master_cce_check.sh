@@ -9,7 +9,9 @@
 # Output: JSON file with all check results
 ###############################################################################
 
-OUTPUT_FILE="${1:-cce_check_result_kubernetes(master)_$(hostname)_$(date +%Y%m%d_%H%M%S).json}"
+HOST_TAG=$( (hostname 2>/dev/null || uname -n 2>/dev/null || cat /etc/hostname 2>/dev/null || echo unknown) | tr ' /' '__' )
+
+OUTPUT_FILE="${1:-cce_check_result_kubernetes(master)_${HOST_TAG}_$(date +%Y%m%d_%H%M%S).json}"
 
 TEMP_DIR="/tmp/cce_check_$$"
 mkdir -p "$TEMP_DIR"
@@ -19,12 +21,16 @@ trap "rm -rf $TEMP_DIR" EXIT
 RESULTS_FILE="$TEMP_DIR/results.txt"
 : > "$RESULTS_FILE"
 
+sanitize_json_value() {
+    printf '%s' "$1" | LC_ALL=C tr '\000-\010\013\014\016-\037' ' ' | tr '\t\r\n' '   ' | sed 's/\\/\\\\/g; s/"/\\"/g; s/  */ /g; s/^ //; s/ $//'
+}
+
 normalize_trace_value() {
-    printf '%s' "$1" | tr '\t\r\n' '   ' | sed 's/  */ /g; s/^ //; s/ $//'
+    printf '%s' "$1" | LC_ALL=C tr '\000-\010\013\014\016-\037' ' ' | tr '\t\r\n' '   ' | sed 's/  */ /g; s/^ //; s/ $//'
 }
 
 summarize_output() {
-    printf '%s' "$1" | head -n 5 | tr '\n' ' ' | sed 's/  */ /g; s/^ //; s/ $//'
+    printf '%s' "$1" | LC_ALL=C tr '\000-\010\013\014\016-\037' ' ' | head -n 5 | tr '\n' ' ' | sed 's/  */ /g; s/^ //; s/ $//'
 }
 
 output_has_negative_marker() {
@@ -72,11 +78,11 @@ add_result() {
     raw_current_state="$current_state"
 
     # Escape strings for JSON
-    detail=$(echo "$detail" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/ /g' | tr '\n' ' ' | sed 's/  */ /g')
-    title=$(echo "$title" | sed 's/\\/\\\\/g; s/"/\\"/g')
-    command=$(echo "$command" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/ /g' | tr '\n' ' ' | sed 's/  */ /g')
-    current_state=$(echo "$current_state" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/ /g' | tr '\n' ' ' | sed 's/  */ /g')
-    remediation=$(echo "$remediation" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/ /g' | tr '\n' ' ' | sed 's/  */ /g')
+    detail=$(sanitize_json_value "$detail")
+    title=$(sanitize_json_value "$title")
+    command=$(sanitize_json_value "$command")
+    current_state=$(sanitize_json_value "$current_state")
+    remediation=$(sanitize_json_value "$remediation")
 
     echo "{\"code\":\"$code\",\"category\":\"$category\",\"title\":\"$title\",\"importance\":\"$importance\",\"status\":\"$status\",\"detail\":\"$detail\",\"source\":\"$source\",\"command\":\"$command\",\"current_state\":\"$current_state\",\"remediation\":\"$remediation\"}" >> "$RESULTS_FILE"
     log_result_trace "$code" "$status" "$title" "$raw_command" "$raw_current_state" "$raw_detail"
@@ -951,7 +957,7 @@ check_CSAP_K8sMaster_17() {
 ###############################################################################
 
 echo "===== Kubernetes(Master) CCE 취약점 진단 시작 ====="
-echo "호스트: $(hostname)"
+echo "호스트: ${HOST_TAG:-unknown}"
 echo "날짜: $(date '+%Y-%m-%d %H:%M:%S')"
 echo ""
 
@@ -988,7 +994,8 @@ echo ""
 ###############################################################################
 
 # System info
-SYS_HOSTNAME=$(hostname 2>/dev/null)
+SYS_HOSTNAME=$( (hostname 2>/dev/null || uname -n 2>/dev/null || cat /etc/hostname 2>/dev/null || echo unknown) | tr '
+' '  ' | sed 's/  */ /g; s/^ //; s/ $//' )
 SYS_OS="VMware ESXi"
 SYS_KERNEL=$(uname -r 2>/dev/null)
 SYS_DATE=$(date '+%Y-%m-%d %H:%M:%S')

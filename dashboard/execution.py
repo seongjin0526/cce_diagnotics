@@ -206,6 +206,10 @@ def _extract_section(raw: str, start_marker: str, end_marker: str) -> str:
     return raw[start + len(start_marker):end].strip()
 
 
+def _sanitize_json_text(raw: str) -> str:
+    return "".join(ch if (ord(ch) >= 32 or ch in "\t\r\n") else " " for ch in raw)
+
+
 def run_assessment(
     target: HostTarget,
     app_key: str,
@@ -244,15 +248,17 @@ def run_assessment(
     if not raw_json:
         raise ExecutionError(execution_log or completed.stderr.strip() or "진단 결과 JSON을 수신하지 못했습니다.")
 
+    sanitized_json = _sanitize_json_text(raw_json)
+
     try:
-        parsed = json.loads(raw_json)
+        parsed = json.loads(sanitized_json)
     except json.JSONDecodeError as exc:
         raise ExecutionError(f"진단 결과 JSON 파싱 실패: {exc}") from exc
 
     return {
         "status_code": status_code,
         "execution_log": execution_log,
-        "raw_json": raw_json,
+        "raw_json": sanitized_json,
         "parsed": parsed,
         "app_key": app_key,
         "script_path": str(app.script_path),

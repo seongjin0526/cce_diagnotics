@@ -2371,9 +2371,11 @@ def build_bash_script(app_key, app_def, items):
         parts.append(_build_db_arg_parser(db_type, script_name, is_esxi))
     else:
         if is_esxi:
-            parts.append(f'OUTPUT_FILE="${{1:-cce_check_result_{platform.lower()}_$(hostname)_$(date +%Y%m%d_%H%M%S).json}}"\n')
+            parts.append(f'HOST_TAG=$( (hostname 2>/dev/null || uname -n 2>/dev/null || cat /etc/hostname 2>/dev/null || echo unknown) | tr \' /\' \'__\' )\n')
+            parts.append(f'OUTPUT_FILE="${{1:-cce_check_result_{platform.lower()}_${{HOST_TAG}}_$(date +%Y%m%d_%H%M%S).json}}"\n')
         else:
-            parts.append(f'OUTPUT_FILE="${{1:-cce_check_result_{platform.lower()}_$(hostname)_$(date +%Y%m%d_%H%M%S).json}}"\n')
+            parts.append(f'HOST_TAG=$( (hostname 2>/dev/null || uname -n 2>/dev/null || cat /etc/hostname 2>/dev/null || echo unknown) | tr \' /\' \'__\' )\n')
+            parts.append(f'OUTPUT_FILE="${{1:-cce_check_result_{platform.lower()}_${{HOST_TAG}}_$(date +%Y%m%d_%H%M%S).json}}"\n')
 
     # ── Temp dir
     if is_esxi:
@@ -2422,7 +2424,7 @@ fi
 ###############################################################################
 
 echo "===== {platform} CCE 취약점 진단 시작 ====="
-echo "호스트: $(hostname)"
+echo "호스트: ${{HOST_TAG:-unknown}}"
 echo "날짜: $(date '+%Y-%m-%d %H:%M:%S')"
 echo ""
 
@@ -2479,7 +2481,8 @@ while getopts "h:P:u:p:" opt; do
 done
 shift $((OPTIND - 1))
 
-OUTPUT_FILE="${{1:-cce_check_result_{db_type}_$(hostname)_$(date +%Y%m%d_%H%M%S).json}}"
+HOST_TAG=$( (hostname 2>/dev/null || uname -n 2>/dev/null || cat /etc/hostname 2>/dev/null || echo unknown) | tr ' /' '__' )
+OUTPUT_FILE="${{1:-cce_check_result_{db_type}_${{HOST_TAG}}_$(date +%Y%m%d_%H%M%S).json}}"
 
 '''
 
@@ -2489,12 +2492,16 @@ def _build_bash_helpers():
     return '''# --- JSON helper functions ---
 results=()
 
+sanitize_json_value() {
+    printf '%s' "$1" | LC_ALL=C tr '\\000-\\010\\013\\014\\016-\\037' ' ' | tr '\\t\\r\\n' '   ' | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g; s/  */ /g; s/^ //; s/ $//'
+}
+
 normalize_trace_value() {
-    printf '%s' "$1" | tr '\\t\\r\\n' '   ' | sed 's/  */ /g; s/^ //; s/ $//'
+    printf '%s' "$1" | LC_ALL=C tr '\\000-\\010\\013\\014\\016-\\037' ' ' | tr '\\t\\r\\n' '   ' | sed 's/  */ /g; s/^ //; s/ $//'
 }
 
 summarize_output() {
-    printf '%s' "$1" | head -n 5 | tr '\\n' ' ' | sed 's/  */ /g; s/^ //; s/ $//'
+    printf '%s' "$1" | LC_ALL=C tr '\\000-\\010\\013\\014\\016-\\037' ' ' | head -n 5 | tr '\\n' ' ' | sed 's/  */ /g; s/^ //; s/ $//'
 }
 
 output_has_negative_marker() {
@@ -2544,11 +2551,11 @@ add_result() {
     local raw_current_state="$current_state"
 
     # Escape strings for JSON
-    detail=$(echo "$detail" | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g; s/\\t/ /g' | tr '\\n' ' ' | sed 's/  */ /g')
-    title=$(echo "$title" | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g')
-    command=$(echo "$command" | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g; s/\\t/ /g' | tr '\\n' ' ' | sed 's/  */ /g')
-    current_state=$(echo "$current_state" | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g; s/\\t/ /g' | tr '\\n' ' ' | sed 's/  */ /g')
-    remediation=$(echo "$remediation" | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g; s/\\t/ /g' | tr '\\n' ' ' | sed 's/  */ /g')
+    detail=$(sanitize_json_value "$detail")
+    title=$(sanitize_json_value "$title")
+    command=$(sanitize_json_value "$command")
+    current_state=$(sanitize_json_value "$current_state")
+    remediation=$(sanitize_json_value "$remediation")
 
     results+=("{\\"code\\":\\"$code\\",\\"category\\":\\"$category\\",\\"title\\":\\"$title\\",\\"importance\\":\\"$importance\\",\\"status\\":\\"$status\\",\\"detail\\":\\"$detail\\",\\"source\\":\\"$source\\",\\"command\\":\\"$command\\",\\"current_state\\":\\"$current_state\\",\\"remediation\\":\\"$remediation\\"}")
     log_result_trace "$code" "$status" "$title" "$raw_command" "$raw_current_state" "$raw_detail"
@@ -2650,12 +2657,16 @@ def _build_esxi_helpers():
 RESULTS_FILE="$TEMP_DIR/results.txt"
 : > "$RESULTS_FILE"
 
+sanitize_json_value() {
+    printf '%s' "$1" | LC_ALL=C tr '\\000-\\010\\013\\014\\016-\\037' ' ' | tr '\\t\\r\\n' '   ' | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g; s/  */ /g; s/^ //; s/ $//'
+}
+
 normalize_trace_value() {
-    printf '%s' "$1" | tr '\\t\\r\\n' '   ' | sed 's/  */ /g; s/^ //; s/ $//'
+    printf '%s' "$1" | LC_ALL=C tr '\\000-\\010\\013\\014\\016-\\037' ' ' | tr '\\t\\r\\n' '   ' | sed 's/  */ /g; s/^ //; s/ $//'
 }
 
 summarize_output() {
-    printf '%s' "$1" | head -n 5 | tr '\\n' ' ' | sed 's/  */ /g; s/^ //; s/ $//'
+    printf '%s' "$1" | LC_ALL=C tr '\\000-\\010\\013\\014\\016-\\037' ' ' | head -n 5 | tr '\\n' ' ' | sed 's/  */ /g; s/^ //; s/ $//'
 }
 
 output_has_negative_marker() {
@@ -2703,11 +2714,11 @@ add_result() {
     raw_current_state="$current_state"
 
     # Escape strings for JSON
-    detail=$(echo "$detail" | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g; s/	/ /g' | tr '\\n' ' ' | sed 's/  */ /g')
-    title=$(echo "$title" | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g')
-    command=$(echo "$command" | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g; s/	/ /g' | tr '\\n' ' ' | sed 's/  */ /g')
-    current_state=$(echo "$current_state" | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g; s/	/ /g' | tr '\\n' ' ' | sed 's/  */ /g')
-    remediation=$(echo "$remediation" | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g; s/	/ /g' | tr '\\n' ' ' | sed 's/  */ /g')
+    detail=$(sanitize_json_value "$detail")
+    title=$(sanitize_json_value "$title")
+    command=$(sanitize_json_value "$command")
+    current_state=$(sanitize_json_value "$current_state")
+    remediation=$(sanitize_json_value "$remediation")
 
     echo "{\\"code\\":\\"$code\\",\\"category\\":\\"$category\\",\\"title\\":\\"$title\\",\\"importance\\":\\"$importance\\",\\"status\\":\\"$status\\",\\"detail\\":\\"$detail\\",\\"source\\":\\"$source\\",\\"command\\":\\"$command\\",\\"current_state\\":\\"$current_state\\",\\"remediation\\":\\"$remediation\\"}" >> "$RESULTS_FILE"
     log_result_trace "$code" "$status" "$title" "$raw_command" "$raw_current_state" "$raw_detail"
@@ -3897,7 +3908,7 @@ def _build_json_output(platform, total_items, is_esxi=False):
 ###############################################################################
 
 # System info
-SYS_HOSTNAME=$(hostname 2>/dev/null)
+SYS_HOSTNAME=$( (hostname 2>/dev/null || uname -n 2>/dev/null || cat /etc/hostname 2>/dev/null || echo unknown) | tr '\r\n' '  ' | sed 's/  */ /g; s/^ //; s/ $//' )
 SYS_OS="VMware ESXi"
 SYS_KERNEL=$(uname -r 2>/dev/null)
 SYS_DATE=$(date '+%Y-%m-%d %H:%M:%S')
@@ -3975,7 +3986,7 @@ echo "결과 파일: $OUTPUT_FILE"
 ###############################################################################
 
 # System info
-SYS_HOSTNAME=$(hostname 2>/dev/null)
+SYS_HOSTNAME=$( (hostname 2>/dev/null || uname -n 2>/dev/null || cat /etc/hostname 2>/dev/null || echo unknown) | tr '\r\n' '  ' | sed 's/  */ /g; s/^ //; s/ $//' )
 SYS_OS=$(grep "PRETTY_NAME" /etc/os-release 2>/dev/null | cut -d'"' -f2)
 SYS_KERNEL=$(uname -r 2>/dev/null)
 SYS_DATE=$(date '+%Y-%m-%d %H:%M:%S')
