@@ -246,7 +246,7 @@ check_CSAP_KVM_01() {
     local detail=""
     local cmd="grep /bin/bash /etc/passwd | cut -f1 -d:"
     local cur_state=""
-    local remediation="￭ 계정 삭제 1\) 계정 목록 확인 후, 불필요한 계정\(인가되지 않은 계정, 퇴직자 계정, 테스트 계정 등 담당자가 실제 업무에 필요 없다고 판단하는 계정\)은 삭제 또는 잠금/만료 설정"
+    local remediation="￭ 계정 삭제 1) 계정 목록 확인 후, 불필요한 계정(인가되지 않은 계정, 퇴직자 계정, 테스트 계정 등 담당자가 실제 업무에 필요 없다고 판단하는 계정)은 삭제 또는 잠금/만료 설정"
 
     local output
     output=$({
@@ -299,7 +299,7 @@ check_CSAP_KVM_02() {
     local detail=""
     local cmd="cat /etc/profile | grep TMOUT"
     local cur_state=""
-    local remediation="￭ Sesstion Timeout 설정 1\) \$ vi /etc/profile 2\) readonly TMOUT=600; export TMOUT ￭ 설정 적용 1\) source /etc/profile"
+    local remediation="￭ Sesstion Timeout 설정 1) \$ vi /etc/profile 2) readonly TMOUT=600; export TMOUT ￭ 설정 적용 1) source /etc/profile"
 
     local output
     output=$({
@@ -309,7 +309,7 @@ check_CSAP_KVM_02() {
 
     if [ -z "$output" ]; then
         status="양호"
-        detail="Session Timeout이 10분\(600초\) 이내로"
+        detail="Session Timeout이 10분(600초) 이내로"
     else
         if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
             local default_text
@@ -341,14 +341,14 @@ check_CSAP_KVM_02() {
         numeric_value=$(first_numeric_value "$output")
         if [ -z "$numeric_value" ] || [ "$numeric_value" -eq 0 ] 2>/dev/null; then
             status="취약"
-            detail="Session Timeout이 10분\(600초\) 이내로"
+            detail="Session Timeout이 10분(600초) 이내로"
         else
             if [ "$numeric_value" -le 600 ] 2>/dev/null; then
                 status="양호"
-                detail="Session Timeout이 10분\(600초\) 이내로"
+                detail="Session Timeout이 10분(600초) 이내로"
             else
                 status="취약"
-                detail="Session Timeout이 10분\(600초\) 이내로"
+                detail="Session Timeout이 10분(600초) 이내로"
             fi
         fi
         fi
@@ -364,7 +364,7 @@ check_CSAP_KVM_03() {
     local detail=""
     local cmd="iptables -L -n -v; iptables -t -nat -L; iptables -L FORWARD"
     local cur_state=""
-    local remediation="￭ iptables 기본 정책을 DROP 설정 후, 접근 허용 IP 등록 1\) iptables –P 명령어를 입력하여 기본 정책 변경\(DROP\) # iptables –P INPUT DROP 2\) iptables –A 명령어를 입력하여 특정 서비스에 대한 접근 허용 IP 등록 # iptables –A INPUT –p tcp –s [접근 허용 IP] --dport [포트 번호] -j ACCEPT 3\) 설정 내용 저장 # service iptables save"
+    local remediation="￭ iptables 기본 정책을 DROP 설정 후, 접근 허용 IP 등록 1) iptables –P 명령어를 입력하여 기본 정책 변경(DROP) # iptables –P INPUT DROP 2) iptables –A 명령어를 입력하여 특정 서비스에 대한 접근 허용 IP 등록 # iptables –A INPUT –p tcp –s [접근 허용 IP] --dport [포트 번호] -j ACCEPT 3) 설정 내용 저장 # service iptables save"
 
     local output
     output=$({
@@ -427,7 +427,7 @@ check_CSAP_KVM_04() {
     local detail=""
     local cmd="virsh net-list"
     local cur_state=""
-    local remediation="￭ Default Bridge 제거 후, 별도 네트워크 브릿지 생성하여 사용 1\) virsh net-destroy default 2\) virsh net-undefine default 3\) service libvirtd restart"
+    local remediation="￭ Default Bridge 제거 후, 별도 네트워크 브릿지 생성하여 사용 1) virsh net-destroy default 2) virsh net-undefine default 3) service libvirtd restart"
 
     local output
     output=$({
@@ -488,7 +488,7 @@ check_CSAP_KVM_05() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 로그 기록 및 백업 1\) 로그를 기록하고 있지 않을 경우 로그 기록 및 백업 정책을 세워 로그를 주기적으로 남겨야 하며 로그 파일 또한 주기적으로 백업을 진행해야 함"
+    local remediation="￭ 로그 기록 및 백업 1) 로그를 기록하고 있지 않을 경우 로그 기록 및 백업 정책을 세워 로그를 주기적으로 남겨야 하며 로그 파일 또한 주기적으로 백업을 진행해야 함"
 
     status="수동점검"
     detail="수동 점검 필요 항목입니다. 로그를 기록하고 있으며 로그 파일 백업이"
@@ -558,7 +558,7 @@ check_ISMS_HV_01() {
     local detail=""
     local cmd="echo \$TMOUT"
     local cur_state=""
-    local remediation="600초\(10분\) 동안 입력이 없을 경우 접속된 클라이언트 세션을 끊도록 설정 [상세 조치 사례] l XenServer, KVM [사용자 Shell Session Timeout 설정] Step 1\) 호스트에 접속 Step 2\) echo \$TMOUT 명령어를 이용하여 사용자 Shell Session Timeout 설정 확인 \$ echo \$TMOUT Step 3\) Session Timeout 10분을 초과하는 경우 아래 두 라인 추가 \$ vi /etc/profile readonly TMOUT=600; export TMOUT Step 4\) 변경된 설정 적용 \$ source /etc/profile"
+    local remediation="600초(10분) 동안 입력이 없을 경우 접속된 클라이언트 세션을 끊도록 설정 [상세 조치 사례] l XenServer, KVM [사용자 Shell Session Timeout 설정] Step 1) 호스트에 접속 Step 2) echo \$TMOUT 명령어를 이용하여 사용자 Shell Session Timeout 설정 확인 \$ echo \$TMOUT Step 3) Session Timeout 10분을 초과하는 경우 아래 두 라인 추가 \$ vi /etc/profile readonly TMOUT=600; export TMOUT Step 4) 변경된 설정 적용 \$ source /etc/profile"
 
     local output
     output=$({
@@ -568,7 +568,7 @@ check_ISMS_HV_01() {
 
     if [ -z "$output" ]; then
         status="취약"
-        detail="웹 콘솔 및 사용자 Shell Session Timeout 설정이 600초\(10분\)를 초과하여 설정된 경우"
+        detail="웹 콘솔 및 사용자 Shell Session Timeout 설정이 600초(10분)를 초과하여 설정된 경우"
     else
         if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
             local default_text
@@ -600,14 +600,14 @@ check_ISMS_HV_01() {
         numeric_value=$(first_numeric_value "$output")
         if [ -z "$numeric_value" ] || [ "$numeric_value" -eq 0 ] 2>/dev/null; then
             status="취약"
-            detail="웹 콘솔 및 사용자 Shell Session Timeout 설정이 600초\(10분\)를 초과하여 설정된 경우"
+            detail="웹 콘솔 및 사용자 Shell Session Timeout 설정이 600초(10분)를 초과하여 설정된 경우"
         else
             if [ "$numeric_value" -le 600 ] 2>/dev/null; then
                 status="양호"
-                detail="웹 콘솔 및 사용자 Shell Session Timeout 설정이 600초\(10분\) 이하로 설정된 경우"
+                detail="웹 콘솔 및 사용자 Shell Session Timeout 설정이 600초(10분) 이하로 설정된 경우"
             else
                 status="취약"
-                detail="웹 콘솔 및 사용자 Shell Session Timeout 설정이 600초\(10분\)를 초과하여 설정된 경우"
+                detail="웹 콘솔 및 사용자 Shell Session Timeout 설정이 600초(10분)를 초과하여 설정된 경우"
             fi
         fi
         fi
@@ -623,7 +623,7 @@ check_ISMS_HV_02() {
     local detail=""
     local cmd="iptables -nL --line-number; IPTables IP; iptables -I RH-Firewall-1-INPUT 1 -p tcp -s --dport 22 -j"
     local cur_state=""
-    local remediation="호스트에서 제공하는 방화벽 애플리케이션을 이용하여 서비스 접속 허용 IP 등록 설정 [상세 조치 사례] l XenServer, KVM [IPTables를 통한 접근 통제] Step 1\) 호스트 접속 \$ iptables -nL --line-number Chain INPUT \(policy ACCEPT\) num target prot opt source destination 1 xapi_nbd_input_chain tcp -- 0.0.0.0/0 0.0.0.0/0 tcp dpt:10809 2 ACCEPT 47 -- 0.0.0.0/0 0.0.0.0/0 3 RH-Firewall-1-INPUT all -- 0.0.0.0/0 0.0.0.0/0 … 중간 생략 … Chain RH-Firewall-1-INPUT \(2 references\) num target prot opt source destination 1 ACCEPT all -- 0.0.0.0/0 0.0.0.0/0 2 ACCEPT icmp -- 0.0.0.0/0 0.0.0.0/0 icmptype 255 3 ACCEPT udp -- 0.0.0.0/0 0.0.0.0/0 udp dpt:67 4 ACCEPT all -- 0.0.0.0/0 0.0.0.0/0 ctstate RELATED,ESTABLISHED 5 ACCEPT udp -- 0.0.0.0/0 0.0.0.0/0 ctstate NEW udp dpt:694 11. 가상화 장비 Step 2\) IPTables 정책 목록을 통해 접속 IP 제한 설정 확인 Step 3\) SSH 원격 접속을 허용된 IP로만 제한 \$ iptables -I RH-Firewall-1-INPUT 1 -p tcp -s <허용 IP> --dport 22 -j ACCEPT \$ iptables -I RH-Firewall-1-INPUT 2 -p tcp -s 0.0.0.0/0 --dport 22 -j DROP Step 4\) IPTables의 변경된 정책 저장 및 서비스 재시작 \$ service iptables save \$ service iptables restart"
+    local remediation="호스트에서 제공하는 방화벽 애플리케이션을 이용하여 서비스 접속 허용 IP 등록 설정 [상세 조치 사례] l XenServer, KVM [IPTables를 통한 접근 통제] Step 1) 호스트 접속 \$ iptables -nL --line-number Chain INPUT (policy ACCEPT) num target prot opt source destination 1 xapi_nbd_input_chain tcp -- 0.0.0.0/0 0.0.0.0/0 tcp dpt:10809 2 ACCEPT 47 -- 0.0.0.0/0 0.0.0.0/0 3 RH-Firewall-1-INPUT all -- 0.0.0.0/0 0.0.0.0/0 … 중간 생략 … Chain RH-Firewall-1-INPUT (2 references) num target prot opt source destination 1 ACCEPT all -- 0.0.0.0/0 0.0.0.0/0 2 ACCEPT icmp -- 0.0.0.0/0 0.0.0.0/0 icmptype 255 3 ACCEPT udp -- 0.0.0.0/0 0.0.0.0/0 udp dpt:67 4 ACCEPT all -- 0.0.0.0/0 0.0.0.0/0 ctstate RELATED,ESTABLISHED 5 ACCEPT udp -- 0.0.0.0/0 0.0.0.0/0 ctstate NEW udp dpt:694 11. 가상화 장비 Step 2) IPTables 정책 목록을 통해 접속 IP 제한 설정 확인 Step 3) SSH 원격 접속을 허용된 IP로만 제한 \$ iptables -I RH-Firewall-1-INPUT 1 -p tcp -s <허용 IP> --dport 22 -j ACCEPT \$ iptables -I RH-Firewall-1-INPUT 2 -p tcp -s 0.0.0.0/0 --dport 22 -j DROP Step 4) IPTables의 변경된 정책 저장 및 서비스 재시작 \$ service iptables save \$ service iptables restart"
 
     status="수동점검"
     detail="서비스 상태 수동 확인 필요. 허용된 IP에서만 관리 콘솔 및 원격 접속이 가능하도록 제한된 경우"
@@ -638,7 +638,7 @@ check_ISMS_HV_04() {
     local detail=""
     local cmd="grep /bin/bash /etc/passwd | cut -f1 -d:; userdel -r"
     local cur_state=""
-    local remediation="불필요한 공용 계정 및 퇴사자 계정 제거 [상세 조치 사례] l XenServer, KVM Step 1\) 호스트 접속 Step 2\) 등록되어 있는 계정 확인 \$ grep /bin/bash /etc/passwd | cut -f1 -d: root user1 Step 3\) 불필요한 계정이 존재하는 경우 해당 계정 삭제 \$ userdel -r <계정명>"
+    local remediation="불필요한 공용 계정 및 퇴사자 계정 제거 [상세 조치 사례] l XenServer, KVM Step 1) 호스트 접속 Step 2) 등록되어 있는 계정 확인 \$ grep /bin/bash /etc/passwd | cut -f1 -d: root user1 Step 3) 불필요한 계정이 존재하는 경우 해당 계정 삭제 \$ userdel -r <계정명>"
 
     local output
     output=$({
@@ -692,7 +692,7 @@ check_ISMS_HV_05() {
     local detail=""
     local cmd="grep /bin/bash /etc/passwd | cut -f1 -d:; gpasswd -d user1 users"
     local cur_state=""
-    local remediation="불필요한 권한이 부여된 계정에 대한 권한 제거 [상세 조치 사례] l KVM Step 1\) 호스트에 접속 Step 2\) bash 계정 목록 확인 \$ grep /bin/bash /etc/passwd | cut -f1 -d: root user1 Step 3\) 불필요한 계정 제거 \$ gpasswd -d user1 users"
+    local remediation="불필요한 권한이 부여된 계정에 대한 권한 제거 [상세 조치 사례] l KVM Step 1) 호스트에 접속 Step 2) bash 계정 목록 확인 \$ grep /bin/bash /etc/passwd | cut -f1 -d: root user1 Step 3) 불필요한 계정 제거 \$ gpasswd -d user1 users"
 
     local output
     output=$({
@@ -746,7 +746,7 @@ check_ISMS_HV_06() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="로그인 계정 비밀번호를 관리 정책에 맞게 설정 [상세 조치 사례] l KVM [RHEL 8 이후 버전 기반 리눅스] Step 1\) 아래 경로 설정 파일 확인 /etc/security/faillock.conf 11. 가상화 장비 /etc/security/pwquality.conf Step 2\) 비밀번호 정책 설정이 되어 있지 않으면 적용 설정 비밀번호 정책 설정 예시\(UNIX 기반\) 예시\)password requisite pam_cracklib.so try_first_pass retry=3 minlen=8 lcredit=-1 ucredit=-1 dcredit=-1 ocredit=-1"
+    local remediation="로그인 계정 비밀번호를 관리 정책에 맞게 설정 [상세 조치 사례] l KVM [RHEL 8 이후 버전 기반 리눅스] Step 1) 아래 경로 설정 파일 확인 /etc/security/faillock.conf 11. 가상화 장비 /etc/security/pwquality.conf Step 2) 비밀번호 정책 설정이 되어 있지 않으면 적용 설정 비밀번호 정책 설정 예시(UNIX 기반) 예시)password requisite pam_cracklib.so try_first_pass retry=3 minlen=8 lcredit=-1 ucredit=-1 dcredit=-1 ocredit=-1"
 
     local config_file="/etc/security/faillock.conf"
     # Expand wildcards/find actual config
@@ -773,7 +773,7 @@ check_ISMS_HV_07() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="로그인 시도 실패 횟수 제한 설정 [상세 조치 사례] l KVM Step 1\) 예시\) RHEL 8 이후 버전 기반 리눅스 아래 경로 설정 파일 확인 /etc/security/faillock.conf /etc/security/pwquality.conf Step 2\) 비밀번호 정책 설정이 되어있지 않으면 적용 설정 비밀번호 정책 설정 예시 # vi /etc/pam.d/system-auth auth required /lib/security/pam_tally.so deny=5 unlock_time=120 no_magic_root account required /lib/security/pam_tally.so no_magic_root reset 812"
+    local remediation="로그인 시도 실패 횟수 제한 설정 [상세 조치 사례] l KVM Step 1) 예시) RHEL 8 이후 버전 기반 리눅스 아래 경로 설정 파일 확인 /etc/security/faillock.conf /etc/security/pwquality.conf Step 2) 비밀번호 정책 설정이 되어있지 않으면 적용 설정 비밀번호 정책 설정 예시 # vi /etc/pam.d/system-auth auth required /lib/security/pam_tally.so deny=5 unlock_time=120 no_magic_root account required /lib/security/pam_tally.so no_magic_root reset 812"
 
     local config_file="/etc/security/faillock.conf"
     # Expand wildcards/find actual config
@@ -800,7 +800,7 @@ check_ISMS_HV_08() {
     local detail=""
     local cmd="cat /etc/ssh/sshd_config | grep Banner; echo ptp_kvm > /etc/modules-load.d/ptp_kvm.conf; echo refclock PHC /dev/ptp0 poll 2 >> /etc/chrony.conf"
     local cur_state=""
-    local remediation="시스템 사용 주의사항 출력 설정 [상세 조치 사례] l KVM Step 1\) 배너 설정 여부 확인 # cat /etc/ssh/sshd_config | grep \"Banner\" Step 2\) /etc/sshd/sshd_config 파일에 배너 내용 삽입 # vi /etc/sshd/sshd_config Banner /etc/issue.net \(예시\) This system is for the use of authorized users only. l KVM Step 1\) PHC 사용 여부 확인 Step 2\) 사용하지 않으면 활성화 적용 # echo ptp_kvm > /etc/modules-load.d/ptp_kvm.conf Step 3\) /dev/ptp0 시계를 chrony 구성에 대한 참조로 추가 설정 # echo \"refclock PHC /dev/ptp0 poll 2\" >> /etc/chrony.conf Step 4\) chrony 데몬 다시 시작 # systemctl restart chronyd"
+    local remediation="시스템 사용 주의사항 출력 설정 [상세 조치 사례] l KVM Step 1) 배너 설정 여부 확인 # cat /etc/ssh/sshd_config | grep \"Banner\" Step 2) /etc/sshd/sshd_config 파일에 배너 내용 삽입 # vi /etc/sshd/sshd_config Banner /etc/issue.net (예시) This system is for the use of authorized users only. l KVM Step 1) PHC 사용 여부 확인 Step 2) 사용하지 않으면 활성화 적용 # echo ptp_kvm > /etc/modules-load.d/ptp_kvm.conf Step 3) /dev/ptp0 시계를 chrony 구성에 대한 참조로 추가 설정 # echo \"refclock PHC /dev/ptp0 poll 2\" >> /etc/chrony.conf Step 4) chrony 데몬 다시 시작 # systemctl restart chronyd"
 
     local config_file="/etc/modules-load.d/ptp_kvm.conf"
     # Expand wildcards/find actual config
@@ -827,7 +827,7 @@ check_ISMS_HV_10() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="SNMP Community String을 복잡도를 만족하는 값으로 설정 [상세 조치 사례] l KVM Step 1\) SNMP 파일에서 Community String 값 확인 sudo vi /etc/snmp/snmpd.conf Step 2\) Community String 설정 후 snmp 서비스 재시작 sudo systemctl enable snmpd sudo systemctl start snmpd"
+    local remediation="SNMP Community String을 복잡도를 만족하는 값으로 설정 [상세 조치 사례] l KVM Step 1) SNMP 파일에서 Community String 값 확인 sudo vi /etc/snmp/snmpd.conf Step 2) Community String 설정 후 snmp 서비스 재시작 sudo systemctl enable snmpd sudo systemctl start snmpd"
 
     status="수동점검"
     detail="수동 점검 필요 항목입니다. SNMP Community String이 복잡도를 만족하는 경우"
@@ -842,7 +842,7 @@ check_ISMS_HV_14() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="원격 로그 서버 또는 스토리지 연동 설정 [상세 조치 사례] l KVM Step 1\) 원격 로그 서버 사용 확인 Step 2\) \(호스트 서버\) /etc/rsyslog.conf 파일 확인 Step 3\) 원격 로그 서버 전송 지시어 확인 Step 4\) logger 명령어를 통해 전송 여부 확인"
+    local remediation="원격 로그 서버 또는 스토리지 연동 설정 [상세 조치 사례] l KVM Step 1) 원격 로그 서버 사용 확인 Step 2) (호스트 서버) /etc/rsyslog.conf 파일 확인 Step 3) 원격 로그 서버 전송 지시어 확인 Step 4) logger 명령어를 통해 전송 여부 확인"
 
     status="수동점검"
     detail="수동 점검 필요 항목입니다. 원격 로그 서버 또는 스토리지가 연동 설정된 경우"
@@ -857,7 +857,7 @@ check_ISMS_HV_15() {
     local detail=""
     local cmd="cat /etc/libvirt/libvirtd.conf; log_level ="
     local cur_state=""
-    local remediation="로그 기록 정책을 내부 정책에 부합하게 설정 [상세 조치 사례] l KVM Step 1\) 호스트에 접속 Step 2\) libvirt 설정파일을 확인하여 로그 레벨 확인 \$ cat /etc/libvirt/libvirtd.conf Step 3\) libvirt 설정파일의 log_level 설정 구문 수정 \$ log_level = Step 4\) 변경 사항 적용을 위해 libvirt 데몬 재시작 \$ systemctl restart libvirtd.service ※ log.level 설정값 레벨 로깅 수준 설명 ERROR 오류 메시지만 기록함 WARNING 경고 및 오류를 기록함 INFO 디버그 항목이 아닌 모든 항목을 기록함 DEBUG 디버그 항목 및 모든 항목을 기록함 836"
+    local remediation="로그 기록 정책을 내부 정책에 부합하게 설정 [상세 조치 사례] l KVM Step 1) 호스트에 접속 Step 2) libvirt 설정파일을 확인하여 로그 레벨 확인 \$ cat /etc/libvirt/libvirtd.conf Step 3) libvirt 설정파일의 log_level 설정 구문 수정 \$ log_level = Step 4) 변경 사항 적용을 위해 libvirt 데몬 재시작 \$ systemctl restart libvirtd.service ※ log.level 설정값 레벨 로깅 수준 설명 ERROR 오류 메시지만 기록함 WARNING 경고 및 오류를 기록함 INFO 디버그 항목이 아닌 모든 항목을 기록함 DEBUG 디버그 항목 및 모든 항목을 기록함 836"
 
     local output
     output=$({

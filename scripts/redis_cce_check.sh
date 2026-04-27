@@ -287,9 +287,9 @@ fi
 check_CSAP_Redis_01() {
     local status="양호"
     local detail=""
-    local cmd="run_redis_cli \"CONFIG GET requirepass\"; cfg=\${REDIS_CONF:-/etc/redis/redis.conf}; if [ -f \"\$cfg\" ]; then out=\$\(grep -Ein \"^[[:space:]]*requirepass\" \"\$cfg\" 2>/dev/null | head -20\); if [ -n \"\$out\" ]; then printf '%s\\n' \"\$out\"; else echo \"SETTING_DEFAULT_BAD|기본값은 인증 비밀번호 미설정입니다.\"; fi; else echo \"FILE_DEFAULT_BAD|기본값은 인증 비밀번호 미설정입니다.\"; fi"
+    local cmd="run_redis_cli \"CONFIG GET requirepass\"; cfg=\${REDIS_CONF:-/etc/redis/redis.conf}; if [ -f \"\$cfg\" ]; then out=\$(grep -Ein \"^[[:space:]]*requirepass\" \"\$cfg\" 2>/dev/null | head -20); if [ -n \"\$out\" ]; then printf '%s\\n' \"\$out\"; else echo \"SETTING_DEFAULT_BAD|기본값은 인증 비밀번호 미설정입니다.\"; fi; else echo \"FILE_DEFAULT_BAD|기본값은 인증 비밀번호 미설정입니다.\"; fi"
     local cur_state=""
-    local remediation="￭ redis.conf 파일 안의 requirepass 설정 1\) # vi /etc/redis/redis.conf 2\) requirepass 값 설정 3\) 인증 로그인 확인"
+    local remediation="￭ redis.conf 파일 안의 requirepass 설정 1) # vi /etc/redis/redis.conf 2) requirepass 값 설정 3) 인증 로그인 확인"
 
     cmd="run_redis_cli \"CONFIG GET requirepass\"; grep -Ein \"^[[:space:]]*requirepass\" ${REDIS_CONF:-/etc/redis/redis.conf}"
     local output
@@ -318,7 +318,7 @@ check_CSAP_Redis_02() {
     local detail=""
     local cmd="cat [redis /redis.conf | grep -i bind"
     local cur_state=""
-    local remediation="￭ redis.conf 파일 안의 bind 설정 1\) # vi [redis 디렉터리/redis.conf] \(인가된 IP만 접근 가능하도록 설정\)"
+    local remediation="￭ redis.conf 파일 안의 bind 설정 1) # vi [redis 디렉터리/redis.conf] (인가된 IP만 접근 가능하도록 설정)"
 
     local config_file="${REDIS_CONF:-/etc/redis/redis.conf}"
     [ -n "${REDIS_CONF:-}" ] && config_file="${REDIS_CONF}"
@@ -385,7 +385,7 @@ check_CSAP_Redis_03() {
     local detail=""
     local cmd="cat /redis.conf | grep -i replica-read-only"
     local cur_state=""
-    local remediation="￭ redis.conf 파일 내 replica-read-only 설정 1\) # vi [redis 디렉터리]/redis.conf replica-read-only를 yes로 변경"
+    local remediation="￭ redis.conf 파일 내 replica-read-only 설정 1) # vi [redis 디렉터리]/redis.conf replica-read-only를 yes로 변경"
 
     local config_file="${REDIS_CONF:-/etc/redis/redis.conf}"
     [ -n "${REDIS_CONF:-}" ] && config_file="${REDIS_CONF}"
@@ -452,7 +452,7 @@ check_CSAP_Redis_04() {
     local detail=""
     local cmd="cat /redis.conf | grep -i rename-command"
     local cur_state=""
-    local remediation="￭ redis.conf 파일 안의 rename-command CONFIG 설정 1\) # vi [redis 디렉터리]/redis.conf rename-command CONFIG \"\" 주석 처리 해제"
+    local remediation="￭ redis.conf 파일 안의 rename-command CONFIG 설정 1) # vi [redis 디렉터리]/redis.conf rename-command CONFIG \"\" 주석 처리 해제"
 
     local config_file="${REDIS_CONF:-/etc/redis/redis.conf}"
     [ -n "${REDIS_CONF:-}" ] && config_file="${REDIS_CONF}"
@@ -522,7 +522,7 @@ check_CSAP_Redis_05() {
     local detail=""
     local cmd="ls -ld"
     local cur_state=""
-    local remediation="￭ redis 데이터 디렉터리 접근 권한 750으로 설정 1\) # chmod 750 [redis 데이터 디렉터리]"
+    local remediation="￭ redis 데이터 디렉터리 접근 권한 750으로 설정 1) # chmod 750 [redis 데이터 디렉터리]"
 
     local vuln_found=false
     local checked_any=false
@@ -571,7 +571,7 @@ check_CSAP_Redis_06() {
     local detail=""
     local cmd="ls -al /redis.conf"
     local cur_state=""
-    local remediation="￭ redis.conf 파일의 권한을 600 이하로 설정 1\) # chmod 600 [redis 데이터디렉터리]/redis.conf"
+    local remediation="￭ redis.conf 파일의 권한을 600 이하로 설정 1) # chmod 600 [redis 데이터디렉터리]/redis.conf"
 
     local vuln_found=false
     local checked_any=false
@@ -609,7 +609,7 @@ check_CSAP_Redis_06() {
     elif [ "$missing_only" = "true" ]; then
         status="N/A"
     fi
-    [ -z "$detail" ] && detail="설정 파일의 접근 권한이 600\(-rw-------\)" && cur_state="점검 대상 파일 없음"
+    [ -z "$detail" ] && detail="설정 파일의 접근 권한이 600(-rw-------)" && cur_state="점검 대상 파일 없음"
 
     add_result "CSAP-Redis-06" "디렉터리 및 파일권한 관리" "설정 파일 접근권한 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -618,9 +618,9 @@ check_CSAP_Redis_06() {
 check_CSAP_Redis_07() {
     local status="양호"
     local detail=""
-    local cmd="run_redis_cli \"CONFIG GET loglevel\"; run_redis_cli \"CONFIG GET logfile\"; cfg=\${REDIS_CONF:-/etc/redis/redis.conf}; if [ -f \"\$cfg\" ]; then out=\$\(grep -Ein \"^[[:space:]]*log\(level|file\)\" \"\$cfg\" 2>/dev/null | head -20\); if [ -n \"\$out\" ]; then printf '%s\\n' \"\$out\"; else echo \"SETTING_DEFAULT_GOOD|기본 loglevel은 notice 입니다.\"; fi; else echo \"FILE_DEFAULT_GOOD|기본 loglevel은 notice 입니다.\"; fi"
+    local cmd="run_redis_cli \"CONFIG GET loglevel\"; run_redis_cli \"CONFIG GET logfile\"; cfg=\${REDIS_CONF:-/etc/redis/redis.conf}; if [ -f \"\$cfg\" ]; then out=\$(grep -Ein \"^[[:space:]]*log(level|file)\" \"\$cfg\" 2>/dev/null | head -20); if [ -n \"\$out\" ]; then printf '%s\\n' \"\$out\"; else echo \"SETTING_DEFAULT_GOOD|기본 loglevel은 notice 입니다.\"; fi; else echo \"FILE_DEFAULT_GOOD|기본 loglevel은 notice 입니다.\"; fi"
     local cur_state=""
-    local remediation="￭ slow query 로그 설정 1\) 127.0.0.1:6379> config set slowlog-log-slower-than 100 ￭ slow query 로그 설정 1\) # vi /etc/[redis 디렉터리]/redis.conf 파일 안의 loglevel notice로 변경 ※ default 설정 : notice"
+    local remediation="￭ slow query 로그 설정 1) 127.0.0.1:6379> config set slowlog-log-slower-than 100 ￭ slow query 로그 설정 1) # vi /etc/[redis 디렉터리]/redis.conf 파일 안의 loglevel notice로 변경 ※ default 설정 : notice"
 
     cmd="run_redis_cli \"CONFIG GET loglevel\"; run_redis_cli \"CONFIG GET logfile\"; grep -Ein \"^[[:space:]]*log(level|file)\" ${REDIS_CONF:-/etc/redis/redis.conf}"
     local output
@@ -646,7 +646,7 @@ check_CSAP_Redis_08() {
     local detail=""
     local cmd="redis-cli -h 127.0.0.1 -p 6379; /redis-cli -v"
     local cur_state=""
-    local remediation="￭ 보안 패치 적용 1\) 취약점이 없는 보안 패치가 적용된 버전으로 업데이트해야 함 ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
+    local remediation="￭ 보안 패치 적용 1) 취약점이 없는 보안 패치가 적용된 버전으로 업데이트해야 함 ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
 
     local output
     output=$({

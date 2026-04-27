@@ -274,13 +274,13 @@ fi
 check_CSAP_MS_SQL_05() {
     local status="양호"
     local detail=""
-    local cmd="SELECT object_name\(id\) AS sp, user_name\(id\) AS grantee, user_name\(grantor\)"
+    local cmd="SELECT object_name(id) AS sp, user_name(id) AS grantee, user_name(grantor)"
     local cur_state=""
-    local remediation="[클라우드 가이드] ￭ 새 쿼리를 통해 프로시저 제한 1\) SQL Server Management Studio → 새쿼리 2\) USE master; 3\) REVOKE <권한> ON object :: <시스템 확자 저장 프로시저명> TO public; ￭ 개체 탐색기를 통해 프로시저 제한 1\) SQL Server Management Studio → 개체 탐색기 → 데이터베이스 2\) 시스템 데이터베이스 → master → 프로그래밍 기능 → 확장 저장 프로시저 → 시스템 확장 저장 프로시저 3\) 아래 *비고\) 시스템 확장 저장 프로시저 제한 목록의 프로시저 별 → 마우스 우클릭 → 속성 4\) 사용 권한 → public 실행 권한 제거 [주요기반시설 가이드] guest/public에게 부여된 시스템 확장 저장 프로시저 권한 제거 [상세 조치 사례] l MSSQL Step 1\) SQL Server Management Studio > 개체 탐색기 > 데이터베이스 Step 2\) 시스템 데이터베이스 > master > 프로그래밍 기능 > 확장 저장 프로시저 > 시스템 확장 저장 프로시저 [ 시스템 확장 저장 프로시저 확인 ] Step 3\) 각 시스템 확장 저장 프로시저 제한 > 마우스 우클릭 > 속성 [ 시스템 확장 저장 프로시저 속성 확인 ] Step 4\) 사용 권한 > public 실행 권한 제거\(체크 해제\) [ public 실행 권한 제거 ] 시스템 확장 저장 프로시저 제한 sys.xp_readdmultistring sys.xp_redeletekey sys.xp_regdeletevalue sys.xp_regenumvalues sys.xp_regread sys.xp_regremovemultistring sys.xp_regwrite 08. DBMS 663"
+    local remediation="[클라우드 가이드] ￭ 새 쿼리를 통해 프로시저 제한 1) SQL Server Management Studio → 새쿼리 2) USE master; 3) REVOKE <권한> ON object :: <시스템 확자 저장 프로시저명> TO public; ￭ 개체 탐색기를 통해 프로시저 제한 1) SQL Server Management Studio → 개체 탐색기 → 데이터베이스 2) 시스템 데이터베이스 → master → 프로그래밍 기능 → 확장 저장 프로시저 → 시스템 확장 저장 프로시저 3) 아래 *비고) 시스템 확장 저장 프로시저 제한 목록의 프로시저 별 → 마우스 우클릭 → 속성 4) 사용 권한 → public 실행 권한 제거 [주요기반시설 가이드] guest/public에게 부여된 시스템 확장 저장 프로시저 권한 제거 [상세 조치 사례] l MSSQL Step 1) SQL Server Management Studio > 개체 탐색기 > 데이터베이스 Step 2) 시스템 데이터베이스 > master > 프로그래밍 기능 > 확장 저장 프로시저 > 시스템 확장 저장 프로시저 [ 시스템 확장 저장 프로시저 확인 ] Step 3) 각 시스템 확장 저장 프로시저 제한 > 마우스 우클릭 > 속성 [ 시스템 확장 저장 프로시저 속성 확인 ] Step 4) 사용 권한 > public 실행 권한 제거(체크 해제) [ public 실행 권한 제거 ] 시스템 확장 저장 프로시저 제한 sys.xp_readdmultistring sys.xp_redeletekey sys.xp_regdeletevalue sys.xp_regenumvalues sys.xp_regread sys.xp_regremovemultistring sys.xp_regwrite 08. DBMS 663"
 
     local output
     output=$({
-        ( run_mssql_query "SELECT object_name\(id\) AS sp, user_name\(id\) AS grantee, user_name\(grantor\)" )
+        ( run_mssql_query "SELECT object_name(id) AS sp, user_name(id) AS grantee, user_name(grantor)" )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
 
@@ -337,7 +337,7 @@ check_CSAP_MS_SQL_06() {
     local detail=""
     local cmd="SELECT name, value FROM sys.configurations WHERE name = xp_cmdshell;; EXEC sp_configure xp_cmdshell; SELECT * FROM sys.configurations WHERE name = allow updates;"
     local cur_state=""
-    local remediation="[클라우드 가이드] ￭ 새 쿼리를 통해 프로시저 확인 1\) SQL Server Management Studio → 새쿼리 2\) EXEC sp_configure 'xp_cmdshell', 0; ￭ 개체 탐색기를 통해 프로시저 확인 1\) SQL Server Management Studio → 개체 탐색기 → 컴퓨터 이름 → 오른쪽 마우스 → 패싯 → 일반 2\) XPCmdShellEnabled 값 false 설정 [주요기반시설 가이드] xp_cmdshell 설정 값을 0 또는 False로 설정 [상세 조치 사례] l MSSQL [ xp_cmdshell 사용이 불필요한 경우ㅣ Step 1\) SQL Server Management Studio > 개체 탐색기 > 컴퓨터 이름 우클릭 > 패싯 > 일반 Step 2\) XPCmdShellEnabled 값 확인 2.1\) Microsoft SQL Server Management Studio에서 확인 [ 개체 탐색기를 통한 프로시저 확인 ] 2.2\) 퀴리문으로 확인 SELECT name, value FROM sys.configurations WHERE name = 'xp_cmdshell'; ※ value가 1이면 활성화, 0이면 비활성화 되어 있는 상태 Step 3\) XPCmdShellEnabled 값을 false로 설정 3.1\) Microsoft SQL Server Management Studio에서 설정 SQL Server Management Studio > 개체 탐색기 > 컴퓨터 이름 우클릭 > 패싯 > 일반 3.2\) 퀴리문으로 설정 EXEC sp_configure 'show advanced options', 1; GO RECONFIGURE; GO EXEC sp_configure 'xp_cmdshell', 1; GO RECONFIGURE GO [ xp_cmdshell 사용이 필요한 경우ㅣ Step 1\) xp_cmdshell의 public 실행 권한 제거 1.1\) Microsoft SQL Server Management Studio에서 제거 SQL Server Management Studio > 개체 탐색기 > [컴퓨터 이름] > 데이터베이스 > 시스템 데이터베이스 > master > 프로그래밍 기능 > 확장 저장 프로시저 > 시스템 확장 저장 프로시저 > sys.xp_cmdshell > 마우스 우클릭 > 속성 > 사용권한에서 public에 대한 사용권한에 '실행' 권한 제거 08. DBMS 1.2\) 퀴리문으로 public에 대한 실행 권한 제거 REVOKE EXECUTE ON master.dbo.xp_cmdshell TO public Step 1\) 서비스 계정\(애플리케이션 연동 등\)의 sysadmin 권한 제거 2.1\) Microsoft SQL Server Management Studio에서 제거 SQL Server Management Studio > 개체 탐색기 > [컴퓨터 이름] > 보안 > 로그인 > [각 계정 선택] > 마우스 우클릭 > 속성 > 서버 역할에서 sysadmin 권한 제거 2.2\) 퀴리문으로 서비스 계정의 sysadmin 권한 제거 - sysadmin 권한이 부여된 계정 확인 EXEC sp_helpsrvrolemember 'sysadmin' - sysadmin 권한이 부여된 계정에 대해 권한 제거 EXEC master..sp_dropsrvrolemember @loginame = N'<계정명>', @rolename = N'sysadmin' ※ 08. DBMS 661"
+    local remediation="[클라우드 가이드] ￭ 새 쿼리를 통해 프로시저 확인 1) SQL Server Management Studio → 새쿼리 2) EXEC sp_configure 'xp_cmdshell', 0; ￭ 개체 탐색기를 통해 프로시저 확인 1) SQL Server Management Studio → 개체 탐색기 → 컴퓨터 이름 → 오른쪽 마우스 → 패싯 → 일반 2) XPCmdShellEnabled 값 false 설정 [주요기반시설 가이드] xp_cmdshell 설정 값을 0 또는 False로 설정 [상세 조치 사례] l MSSQL [ xp_cmdshell 사용이 불필요한 경우ㅣ Step 1) SQL Server Management Studio > 개체 탐색기 > 컴퓨터 이름 우클릭 > 패싯 > 일반 Step 2) XPCmdShellEnabled 값 확인 2.1) Microsoft SQL Server Management Studio에서 확인 [ 개체 탐색기를 통한 프로시저 확인 ] 2.2) 퀴리문으로 확인 SELECT name, value FROM sys.configurations WHERE name = 'xp_cmdshell'; ※ value가 1이면 활성화, 0이면 비활성화 되어 있는 상태 Step 3) XPCmdShellEnabled 값을 false로 설정 3.1) Microsoft SQL Server Management Studio에서 설정 SQL Server Management Studio > 개체 탐색기 > 컴퓨터 이름 우클릭 > 패싯 > 일반 3.2) 퀴리문으로 설정 EXEC sp_configure 'show advanced options', 1; GO RECONFIGURE; GO EXEC sp_configure 'xp_cmdshell', 1; GO RECONFIGURE GO [ xp_cmdshell 사용이 필요한 경우ㅣ Step 1) xp_cmdshell의 public 실행 권한 제거 1.1) Microsoft SQL Server Management Studio에서 제거 SQL Server Management Studio > 개체 탐색기 > [컴퓨터 이름] > 데이터베이스 > 시스템 데이터베이스 > master > 프로그래밍 기능 > 확장 저장 프로시저 > 시스템 확장 저장 프로시저 > sys.xp_cmdshell > 마우스 우클릭 > 속성 > 사용권한에서 public에 대한 사용권한에 '실행' 권한 제거 08. DBMS 1.2) 퀴리문으로 public에 대한 실행 권한 제거 REVOKE EXECUTE ON master.dbo.xp_cmdshell TO public Step 1) 서비스 계정(애플리케이션 연동 등)의 sysadmin 권한 제거 2.1) Microsoft SQL Server Management Studio에서 제거 SQL Server Management Studio > 개체 탐색기 > [컴퓨터 이름] > 보안 > 로그인 > [각 계정 선택] > 마우스 우클릭 > 속성 > 서버 역할에서 sysadmin 권한 제거 2.2) 퀴리문으로 서비스 계정의 sysadmin 권한 제거 - sysadmin 권한이 부여된 계정 확인 EXEC sp_helpsrvrolemember 'sysadmin' - sysadmin 권한이 부여된 계정에 대해 권한 제거 EXEC master..sp_dropsrvrolemember @loginame = N'<계정명>', @rolename = N'sysadmin' ※ 08. DBMS 661"
 
     local output
     output=$({
@@ -400,7 +400,7 @@ check_CSAP_MS_SQL_01() {
     local detail=""
     local cmd="SELECT log.name AS"
     local cur_state=""
-    local remediation="￭ 새 쿼리를 통해 불필요한 계정 삭제 1\) SQL Server Management Studio → 새 쿼리 2\) DROP login \"로그인 사용자 계정명\" ￭ 개체 탐색기를 통해 불필요한 계정 삭제 1\) SQL Server Management Studio → 개체 탐색기 → 보안 → 로그인 2\) 해당 계정 오른쪽 마우스 → 삭제 → 확인"
+    local remediation="￭ 새 쿼리를 통해 불필요한 계정 삭제 1) SQL Server Management Studio → 새 쿼리 2) DROP login \"로그인 사용자 계정명\" ￭ 개체 탐색기를 통해 불필요한 계정 삭제 1) SQL Server Management Studio → 개체 탐색기 → 보안 → 로그인 2) 해당 계정 오른쪽 마우스 → 삭제 → 확인"
 
     local output
     output=$({
@@ -453,7 +453,7 @@ check_CSAP_MS_SQL_02() {
     local detail=""
     local cmd="EXEC sp_helpsrvrolemember sysadmin"
     local cur_state=""
-    local remediation="￭ 새 쿼리를 통해 역할 제거 1\) SQL Server Management Studio → 새 쿼리 2\) EXEC sp_droprolemember '<구성원 이름>', 'sysadmin' ￭ 개체 탐색기를 통해 역할 제거 1\) SQL Server Management Studio → 개체 탐색기 → 보안 → 로그인 2\) 계정별 오른쪽 마우스 → 속성 → 서버 역할에서 sysadmin 권한 해제"
+    local remediation="￭ 새 쿼리를 통해 역할 제거 1) SQL Server Management Studio → 새 쿼리 2) EXEC sp_droprolemember '<구성원 이름>', 'sysadmin' ￭ 개체 탐색기를 통해 역할 제거 1) SQL Server Management Studio → 개체 탐색기 → 보안 → 로그인 2) 계정별 오른쪽 마우스 → 속성 → 서버 역할에서 sysadmin 권한 해제"
 
     local output
     output=$({
@@ -506,7 +506,7 @@ check_CSAP_MS_SQL_03() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 새 쿼리를 통해 변경 1\) SQL Server Management Studio → 새 쿼리 2\) ALTER LOGIN sa WITH password='변경할 패스워드'; ￭ 개체 탐색기를 통해 변경 1\) SQL Server Management Studio → 개체 탐색기 → 보안 → 로그인 2\) sa 계정 오른쪽 마우스 → 속성 → 일반 → 암호 변경"
+    local remediation="￭ 새 쿼리를 통해 변경 1) SQL Server Management Studio → 새 쿼리 2) ALTER LOGIN sa WITH password='변경할 패스워드'; ￭ 개체 탐색기를 통해 변경 1) SQL Server Management Studio → 개체 탐색기 → 보안 → 로그인 2) sa 계정 오른쪽 마우스 → 속성 → 일반 → 암호 변경"
 
     status="수동점검"
     detail="수동 점검 필요 항목입니다. sa 계정에 패스워드가 설정된 경우"
@@ -521,7 +521,7 @@ check_CSAP_MS_SQL_04() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 데이터베이스에 존재하는 Guest 계정 비활성화 1\) SQL Server Management Studio → 새 쿼리 2\) USE [해당 데이터베이스] 3\) REVOKE connect FROM guest;"
+    local remediation="￭ 데이터베이스에 존재하는 Guest 계정 비활성화 1) SQL Server Management Studio → 새 쿼리 2) USE [해당 데이터베이스] 3) REVOKE connect FROM guest;"
 
     status="수동점검"
     detail="수동 점검 필요 항목입니다. 데이터베이스에 Guest 계정이 활성화되어"
@@ -536,7 +536,7 @@ check_CSAP_MS_SQL_07() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 개체 탐색기를 통해 로그 활성화 1\) SQL Server Management Studio → 개체 탐색기 → 컴퓨터 이름 → 오른쪽 마우스 → 보안 → 로그인 감사 설정 여부 확인 2\) \(실패한 로그인만/성공한 로그인만/실패한 로그인과 성공한 로그인 모두\) 이 3가지 중 1가지로 설정 ￭ 백업 정책 수립 1\) 백업 정책을 수립하고 주기적으로 로그 파일을 백업 ※ DBMS 유지 보수 및 업그레이드 시에는 전체 FULL 백업 절차 수립 \(권고\)"
+    local remediation="￭ 개체 탐색기를 통해 로그 활성화 1) SQL Server Management Studio → 개체 탐색기 → 컴퓨터 이름 → 오른쪽 마우스 → 보안 → 로그인 감사 설정 여부 확인 2) (실패한 로그인만/성공한 로그인만/실패한 로그인과 성공한 로그인 모두) 이 3가지 중 1가지로 설정 ￭ 백업 정책 수립 1) 백업 정책을 수립하고 주기적으로 로그 파일을 백업 ※ DBMS 유지 보수 및 업그레이드 시에는 전체 FULL 백업 절차 수립 (권고)"
 
     status="수동점검"
     detail="수동 점검 필요 항목입니다. 백업 정책이 수립되어 있으며 데이터,"
@@ -551,7 +551,7 @@ check_CSAP_MS_SQL_08() {
     local detail=""
     local cmd="SELECT @@VERSION;"
     local cur_state=""
-    local remediation="￭ 최신 보안 패치 적용 1\) 최신 보안 패치가 발표되면 패치 적용 ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
+    local remediation="￭ 최신 보안 패치 적용 1) 최신 보안 패치가 발표되면 패치 적용 ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
 
     local output
     output=$({
@@ -604,7 +604,7 @@ check_ISMS_D_01() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="기본\(관리자\) 계정의 초기 비밀번호 및 권한 정책 변경 [상세 조치 사례] l MSSQL Step 1\) sa 계정 비밀번호 변경 ALTER LOGIN sa WITH PASSWORD = '신규 비밀번호'; [ sa 계정 비밀번호 변경 ] Step 2\) 비밀번호 정책 강제 사용 적용"
+    local remediation="기본(관리자) 계정의 초기 비밀번호 및 권한 정책 변경 [상세 조치 사례] l MSSQL Step 1) sa 계정 비밀번호 변경 ALTER LOGIN sa WITH PASSWORD = '신규 비밀번호'; [ sa 계정 비밀번호 변경 ] Step 2) 비밀번호 정책 강제 사용 적용"
 
     status="수동점검"
     detail="수동 점검 필요 항목입니다. 기본 계정의 초기 비밀번호를 변경하거나 잠금설정한 경우"
@@ -619,7 +619,7 @@ check_ISMS_D_02() {
     local detail=""
     local cmd="EXEC sp_droplogin ' ';"
     local cur_state=""
-    local remediation="계정별 용도를 파악한 후 불필요한 계정 삭제 [상세 조치 사례] l MSSQL Step 1\) 불필요한 계정 삭제 EXEC sp_droplogin '삭제할 계정';"
+    local remediation="계정별 용도를 파악한 후 불필요한 계정 삭제 [상세 조치 사례] l MSSQL Step 1) 불필요한 계정 삭제 EXEC sp_droplogin '삭제할 계정';"
 
     status="수동점검"
     detail="계정 정보를 확인하여 불필요한 계정이 없는 경우"
@@ -634,7 +634,7 @@ check_ISMS_D_03() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="기관 정책에 맞게 비밀번호 사용 기간 및 복잡도 정책 설정 [상세 조치 사례] l MSSQL Step 1\) 비밀번호 변경 주기는 '암호 만료 강제 적용'을 적용함으로써 주기적으로 변경할 수 있으며, 변경 기간은 OS의 '암호 정책'에서 적용받으므로 '암호 정책 > 최대 암호 사용 기간' 설정도 변경해야 함 Step 2\) 암호 만료 강제 적용 보안 > 로그인 > 각 로그인 계정 > 속성 > \"암호 만료 강제 적용\" 설정 [ 암호 만료 강제 적용 설정 ] Step 3\) OS 암호 정책 설정 [관리 도구] > [로컬 보안 정책] > [보안 설정] > [계정 정책] > [암호 정책] > 최대 암호 사용 기간 : '60일' 설정 [ 최대 암호 사용 기간 설정 ]"
+    local remediation="기관 정책에 맞게 비밀번호 사용 기간 및 복잡도 정책 설정 [상세 조치 사례] l MSSQL Step 1) 비밀번호 변경 주기는 '암호 만료 강제 적용'을 적용함으로써 주기적으로 변경할 수 있으며, 변경 기간은 OS의 '암호 정책'에서 적용받으므로 '암호 정책 > 최대 암호 사용 기간' 설정도 변경해야 함 Step 2) 암호 만료 강제 적용 보안 > 로그인 > 각 로그인 계정 > 속성 > \"암호 만료 강제 적용\" 설정 [ 암호 만료 강제 적용 설정 ] Step 3) OS 암호 정책 설정 [관리 도구] > [로컬 보안 정책] > [보안 설정] > [계정 정책] > [암호 정책] > 최대 암호 사용 기간 : '60일' 설정 [ 최대 암호 사용 기간 설정 ]"
 
     status="수동점검"
     detail="수동 점검 필요 항목입니다. 기관 정책에 맞게 비밀번호 사용 기간 및 복잡도 설정이 적용된 경우"
@@ -649,7 +649,7 @@ check_ISMS_D_04() {
     local detail=""
     local cmd="EXEC sp_droprolemember 'user_name', 'sysadmin';"
     local cur_state=""
-    local remediation="관리자 권한이 필요한 계정 및 그룹에만 관리자 권한 부여 [상세 조치 사례] l MSSQL Step 1\) sysadmin서버 역할의 계정 목록을 확인 후 서버 역할에 불필요한 계정이 있는 경우 서버 역할에서 삭제 EXEC sp_droprolemember 'user_name', 'sysadmin'; 예시\) EXEC sp_dropsrvrolemember 'user01', 'sysadmin'; \(user01계정을 sysadmin서버 역할에서 삭제\) [ 서버 역할에서 불필요 계정 삭제 예시 ]"
+    local remediation="관리자 권한이 필요한 계정 및 그룹에만 관리자 권한 부여 [상세 조치 사례] l MSSQL Step 1) sysadmin서버 역할의 계정 목록을 확인 후 서버 역할에 불필요한 계정이 있는 경우 서버 역할에서 삭제 EXEC sp_droprolemember 'user_name', 'sysadmin'; 예시) EXEC sp_dropsrvrolemember 'user01', 'sysadmin'; (user01계정을 sysadmin서버 역할에서 삭제) [ 서버 역할에서 불필요 계정 삭제 예시 ]"
 
     status="수동점검"
     detail="관리자 권한이 필요한 계정 및 그룹에만 관리자 권한이 부여된 경우"
@@ -664,7 +664,7 @@ check_ISMS_D_06() {
     local detail=""
     local cmd="EXEC sp_droplogin ' ';; EXEC sp_adduser ' ', ' ', 'db_owner';; EXEC sp_adduser ' ', ' ', ' ';"
     local cur_state=""
-    local remediation="사용자별 계정 생성 및 권한 부여 [상세 조치 사례] l MSSQL Step 1\) 공용계정 삭제 EXEC sp_droplogin '공용 계정'; 08. DBMS Step 2\) 사용자별, 응용 프로그램별 계정 생성 CREATE LOGIN '생성 계정' WITH PASSWORD = '비밀번호'; CREATE USER '생성 계정' FOR LOGIN '생성 계정' WITH DEFAULT_SCHEMA ='생성 계정'; ALTER USER '생성 계정'; EXEC sp_adduser '생성 계정', '생성 계정', 'db_owner'; EXEC sp_adduser '생성 계정', '생성 계정', '생성 계정'; EXEC sp_grantdbaccess '생성 계정', '생성 계정';"
+    local remediation="사용자별 계정 생성 및 권한 부여 [상세 조치 사례] l MSSQL Step 1) 공용계정 삭제 EXEC sp_droplogin '공용 계정'; 08. DBMS Step 2) 사용자별, 응용 프로그램별 계정 생성 CREATE LOGIN '생성 계정' WITH PASSWORD = '비밀번호'; CREATE USER '생성 계정' FOR LOGIN '생성 계정' WITH DEFAULT_SCHEMA ='생성 계정'; ALTER USER '생성 계정'; EXEC sp_adduser '생성 계정', '생성 계정', 'db_owner'; EXEC sp_adduser '생성 계정', '생성 계정', '생성 계정'; EXEC sp_grantdbaccess '생성 계정', '생성 계정';"
 
     status="수동점검"
     detail="사용자별 계정을 사용하고 있는 경우"
@@ -679,7 +679,7 @@ check_ISMS_D_08() {
     local detail=""
     local cmd="select name, password_hash from sys.sql_logins;; USE"
     local cur_state=""
-    local remediation="SHA-256 이상의 암호화 알고리즘 적용 [상세 조치 사례] l MSSQL Step 1\) 저장된 비밀번호 해시 값 확인 select name, password_hash from sys.sql_logins; ※ MSSQL 2012이상에서 사용자 계정의 비밀번호는 32bit Salt를 적용한 SHA-512 해시 알고리즘을 사용 [ 일반 이용자 패스워드 해시 알고리즘 변경 ] Step 1\) 데이터베이스 접속 USE <데이터베이스명> GO Step 1\) 열 추가 ALTER TABLE <테이블명> ADD <신규 해시 칼럼명> varbinary\(256\) GO Step 2\) 새로운 열에 암호화 된 데이터 저장 UPDATE <테이블명> SET <신규 해시 칼럼명> = HASHBYTES\('SHA2_256', <기존 해시 칼럼명>\) GO Step 3\) 기존 열 제거 ALTER TABLE <테이블명> DROP COLUMN <기존 해시 칼럼명> GO"
+    local remediation="SHA-256 이상의 암호화 알고리즘 적용 [상세 조치 사례] l MSSQL Step 1) 저장된 비밀번호 해시 값 확인 select name, password_hash from sys.sql_logins; ※ MSSQL 2012이상에서 사용자 계정의 비밀번호는 32bit Salt를 적용한 SHA-512 해시 알고리즘을 사용 [ 일반 이용자 패스워드 해시 알고리즘 변경 ] Step 1) 데이터베이스 접속 USE <데이터베이스명> GO Step 1) 열 추가 ALTER TABLE <테이블명> ADD <신규 해시 칼럼명> varbinary(256) GO Step 2) 새로운 열에 암호화 된 데이터 저장 UPDATE <테이블명> SET <신규 해시 칼럼명> = HASHBYTES('SHA2_256', <기존 해시 칼럼명>) GO Step 3) 기존 열 제거 ALTER TABLE <테이블명> DROP COLUMN <기존 해시 칼럼명> GO"
 
     local output
     output=$({
@@ -741,7 +741,7 @@ check_ISMS_D_11() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="시스템 테이블에 일반 사용자 계정이 접근할 수 없도록 설정 [상세 조치 사례] l MSSQL Step 1\) system tables 접근 권한이 PUBLIC, GUEST 또는 비인가된 사용자에게 부여된 경우 접근 권한을 제거 REVOKE <권한> ON <Object> FROM [계정명]|[PUBLIC]|[GUEST]; Step 2\) 시스템 테이블에 접근하기 위해서는 stored procedure 또는 information_schema views를 통해 접근해야 함 Step 3\) 시스템 테이블에 접근 가능한 stored procedure는 사용이 제한되어야 함"
+    local remediation="시스템 테이블에 일반 사용자 계정이 접근할 수 없도록 설정 [상세 조치 사례] l MSSQL Step 1) system tables 접근 권한이 PUBLIC, GUEST 또는 비인가된 사용자에게 부여된 경우 접근 권한을 제거 REVOKE <권한> ON <Object> FROM [계정명]|[PUBLIC]|[GUEST]; Step 2) 시스템 테이블에 접근하기 위해서는 stored procedure 또는 information_schema views를 통해 접근해야 함 Step 3) 시스템 테이블에 접근 가능한 stored procedure는 사용이 제한되어야 함"
 
     status="수동점검"
     detail="수동 점검 필요 항목입니다. 시스템 테이블에 DBA만 접근 가능하도록 설정되어 있는 경우"
@@ -756,7 +756,7 @@ check_ISMS_D_16() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="Windows 인증 모드 사용 [상세 조치 사례] l MSSQL Step 1\) Windows 인증 모드 활성화 SQL Server Management Studio > 해당 서버 우클릭 > 속성 > 보안 > 서버 인증> Windows 인증 모드 \(W\)를 클릭하여 활성화 08. DBMS [ Windows 인증 모드\(W\) 활성화 ] 646"
+    local remediation="Windows 인증 모드 사용 [상세 조치 사례] l MSSQL Step 1) Windows 인증 모드 활성화 SQL Server Management Studio > 해당 서버 우클릭 > 속성 > 보안 > 서버 인증> Windows 인증 모드 (W)를 클릭하여 활성화 08. DBMS [ Windows 인증 모드(W) 활성화 ] 646"
 
     status="수동점검"
     detail="수동 점검 필요 항목입니다. Windows 인증 모드를 사용하고 sa 계정이 비활성화되어 있는 경우"
@@ -769,14 +769,14 @@ check_ISMS_D_16() {
 check_ISMS_D_25() {
     local status="양호"
     local detail=""
-    local cmd="SELECT @@version; SELECT SERVERPROPERTY\(productversion\) AS ProductVersion, SERVERPROPERTY\(productlev"
+    local cmd="SELECT @@version; SELECT SERVERPROPERTY(productversion) AS ProductVersion, SERVERPROPERTY(productlev"
     local cur_state=""
-    local remediation="보안 패치가 적용된 버전으로 업데이트 [상세 조치 사례] l MSSQL Step 1\) 시스템에서 제품 버전 현황 확인 SELECT @@version 또는 SELECT SERVERPROPERTY\('productversion'\) AS ProductVersion, SERVERPROPERTY\('productlev el'\) AS ProductLevel, SERVERPROPERTY\('edition'\) AS Edition; Step 2\) MSSQL 최신 버전 확인 http://support.microsoft.com/kb/321185/en-uswnloads/index.html 664"
+    local remediation="보안 패치가 적용된 버전으로 업데이트 [상세 조치 사례] l MSSQL Step 1) 시스템에서 제품 버전 현황 확인 SELECT @@version 또는 SELECT SERVERPROPERTY('productversion') AS ProductVersion, SERVERPROPERTY('productlev el') AS ProductLevel, SERVERPROPERTY('edition') AS Edition; Step 2) MSSQL 최신 버전 확인 http://support.microsoft.com/kb/321185/en-uswnloads/index.html 664"
 
     local output
     output=$({
         ( run_mssql_query "SELECT @@version" )
-        ( run_mssql_query "SELECT SERVERPROPERTY\(productversion\) AS ProductVersion, SERVERPROPERTY\(productlev" )
+        ( run_mssql_query "SELECT SERVERPROPERTY(productversion) AS ProductVersion, SERVERPROPERTY(productlev" )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
 

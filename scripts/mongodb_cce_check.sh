@@ -306,7 +306,7 @@ check_CSAP_MongoDB_01() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 불필요한 데이터베이스 삭제 1\) > use [삭제할 DB명] 2\) > db.dropDatabase\(\); ￭ 불필요한 collection 삭제 1\) > use [삭제할 collection이 존재하는 DB명] 2\) > db.[collection명].drop\(\);"
+    local remediation="￭ 불필요한 데이터베이스 삭제 1) > use [삭제할 DB명] 2) > db.dropDatabase(); ￭ 불필요한 collection 삭제 1) > use [삭제할 collection이 존재하는 DB명] 2) > db.[collection명].drop();"
 
     cmd="run_mongo_query \"db.adminCommand({listDatabases:1})\" admin; run_mongo_query \"db.getSiblingDB(...).getCollectionNames()\" admin"
     local dbs_output
@@ -329,7 +329,7 @@ check_CSAP_MongoDB_02() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 불필요한 계정 삭제 1\) > db.dropUser\(\"계정명\"\); ※ MongoDB v2.6까지 계정 삭제 시, db.removeUser\(\) 명령어 사용"
+    local remediation="￭ 불필요한 계정 삭제 1) > db.dropUser(\"계정명\"); ※ MongoDB v2.6까지 계정 삭제 시, db.removeUser() 명령어 사용"
 
     cmd="run_mongo_query \"db.getSiblingDB(\'admin\').runCommand({usersInfo:1})\" admin"
     local users_output
@@ -347,7 +347,7 @@ check_CSAP_MongoDB_03() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 인증 옵션 사용 활성화 1\) 환경설정 파일 내 security 필드 아래 authorization 값 enabled 설정 ※ MongoDB v3.0 이하에서는 auth=true로 설정 ￭ MongoDB 재구동 \(예시\) 1\) # systemctl restart mongod ￭ 사용자 인증 확인 1\) > db.auth\(\"사용자 계정\", \"패스워드\"\);"
+    local remediation="￭ 인증 옵션 사용 활성화 1) 환경설정 파일 내 security 필드 아래 authorization 값 enabled 설정 ※ MongoDB v3.0 이하에서는 auth=true로 설정 ￭ MongoDB 재구동 (예시) 1) # systemctl restart mongod ￭ 사용자 인증 확인 1) > db.auth(\"사용자 계정\", \"패스워드\");"
 
     cmd="grep -En \"authorization|auth\" ${MONGOD_CONF:-/etc/mongod.conf}"
     local config_output
@@ -378,7 +378,7 @@ check_CSAP_MongoDB_04() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 관리자 계정 생성 1\) 쿼리 입력 > db.createUser\({user: \"관리자 계정명\", pwd: \"패스워드\", roles: [\"readWriteAny Database\",\"userAdminAnyDatabase\",\"dbAdminAnyDatabase\"]}\); ※ roles : superuser 권한\(root\)은 사용하지 않도록 설정"
+    local remediation="￭ 관리자 계정 생성 1) 쿼리 입력 > db.createUser({user: \"관리자 계정명\", pwd: \"패스워드\", roles: [\"readWriteAny Database\",\"userAdminAnyDatabase\",\"dbAdminAnyDatabase\"]}); ※ roles : superuser 권한(root)은 사용하지 않도록 설정"
 
     cmd="run_mongo_query \"db.getSiblingDB(\'admin\').runCommand({usersInfo:1})\" admin"
     local admin_users_output
@@ -401,7 +401,7 @@ check_CSAP_MongoDB_05() {
     local detail=""
     local cmd="ls -al | grep mongo*; ls -al"
     local cur_state=""
-    local remediation="￭ 실행 파일, 설정 파일 소유자 수정 및 Others 실행 권한 제거 1\) # chown dba:dba [file명] 2\) # chmod 750 [file명]"
+    local remediation="￭ 실행 파일, 설정 파일 소유자 수정 및 Others 실행 권한 제거 1) # chown dba:dba [file명] 2) # chmod 750 [file명]"
 
     local vuln_found=false
     local checked_any=false
@@ -496,9 +496,9 @@ check_CSAP_MongoDB_05() {
 check_CSAP_MongoDB_06() {
     local status="양호"
     local detail=""
-    local cmd="run_mongo_query 'db.adminCommand\({getCmdLineOpts:1}\)' admin; cfg=\${MONGOD_CONF:-/etc/mongod.conf}; if [ -f \"\$cfg\" ]; then out=\$\(grep -Ein \"http|rest|bindIp|bindIpAll\" \"\$cfg\" 2>/dev/null | head -20\); if [ -n \"\$out\" ]; then printf '%s\\n' \"\$out\"; else echo \"SETTING_DEFAULT_GOOD|MongoDB 7 기본값은 HTTP interface 미사용입니다.\"; fi; else echo \"FILE_DEFAULT_GOOD|MongoDB 7 기본값은 HTTP interface 미사용입니다.\"; fi"
+    local cmd="run_mongo_query 'db.adminCommand({getCmdLineOpts:1})' admin; cfg=\${MONGOD_CONF:-/etc/mongod.conf}; if [ -f \"\$cfg\" ]; then out=\$(grep -Ein \"http|rest|bindIp|bindIpAll\" \"\$cfg\" 2>/dev/null | head -20); if [ -n \"\$out\" ]; then printf '%s\\n' \"\$out\"; else echo \"SETTING_DEFAULT_GOOD|MongoDB 7 기본값은 HTTP interface 미사용입니다.\"; fi; else echo \"FILE_DEFAULT_GOOD|MongoDB 7 기본값은 HTTP interface 미사용입니다.\"; fi"
     local cur_state=""
-    local remediation="￭ 인증 옵션 추가 후, 데몬 재시작 \(예시\) 1\) --auth 옵션 설정 후, mongod 데몬 재시작 # mongod—config [MongoDB 설정 파일] --auth 2\) 설정 파일 수정 # vi [MongoDB 설정 파일] authorization : enabled 설정 ※ auth=true \(일부 버전에 해당\)"
+    local remediation="￭ 인증 옵션 추가 후, 데몬 재시작 (예시) 1) --auth 옵션 설정 후, mongod 데몬 재시작 # mongod—config [MongoDB 설정 파일] --auth 2) 설정 파일 수정 # vi [MongoDB 설정 파일] authorization : enabled 설정 ※ auth=true (일부 버전에 해당)"
 
     cmd="run_mongo_query \"db.adminCommand({getCmdLineOpts:1})\" admin; grep -En \"http|rest\" ${MONGOD_CONF:-/etc/mongod.conf}"
     local output
@@ -524,7 +524,7 @@ check_CSAP_MongoDB_07() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 환경 설정 파일에서 bindip 수정 1\) # vi [MongoDB 환경 설정 파일] bindIp : 인가된 IP"
+    local remediation="￭ 환경 설정 파일에서 bindip 수정 1) # vi [MongoDB 환경 설정 파일] bindIp : 인가된 IP"
 
     cmd="grep -En \"bindIp|bindIpAll\" ${MONGOD_CONF:-/etc/mongod.conf}"
     local bind_output
@@ -556,7 +556,7 @@ check_CSAP_MongoDB_08() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 정책 수립 1\) 백업 정책을 수립하여 로그 파일을 관리 2\) 주기적으로 로그 파일을 백업"
+    local remediation="￭ 정책 수립 1) 백업 정책을 수립하여 로그 파일을 관리 2) 주기적으로 로그 파일을 백업"
 
     cmd="grep -En \"systemLog|path|destination\" ${MONGOD_CONF:-/etc/mongod.conf}"
     local log_output
@@ -580,7 +580,7 @@ check_CSAP_MongoDB_09() {
     local detail=""
     local cmd="mongod --version; mongosh"
     local cur_state=""
-    local remediation="￭ 보안 패치 적용 1\) 보안 취약점이 존재하지 않는 버전으로 보안패치를 적용해야 함 ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
+    local remediation="￭ 보안 패치 적용 1) 보안 취약점이 존재하지 않는 버전으로 보안패치를 적용해야 함 ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
 
     local output
     output=$({

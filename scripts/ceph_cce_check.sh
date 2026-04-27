@@ -249,7 +249,7 @@ check_CSAP_Ceph_01() {
     local detail=""
     local cmd="ls /keyring; ls -l /etc/ceph/*.keyring"
     local cur_state=""
-    local remediation="￭ Keyring 소유자 및 파일 권한 변경 1\) # chown root:root [keyring 파일 디렉터리]/keyring 파일 2\) # chmod 400 [keyring 파일 디렉터리]/keyring 파일"
+    local remediation="￭ Keyring 소유자 및 파일 권한 변경 1) # chown root:root [keyring 파일 디렉터리]/keyring 파일 2) # chmod 400 [keyring 파일 디렉터리]/keyring 파일"
 
     local vuln_found=false
     local checked_any=false
@@ -322,7 +322,7 @@ check_CSAP_Ceph_02() {
     local detail=""
     local cmd="ls -ld ~/.ssh; ls -l ~/.ssh"
     local cur_state=""
-    local remediation="￭ .ssh 디렉터리 권한 변경 1\) # chmod 700 ~/.ssh ￭ ssh 키 파일 권한 변경 1\) # chmod 600 ~/.ssh/키 파일"
+    local remediation="￭ .ssh 디렉터리 권한 변경 1) # chmod 700 ~/.ssh ￭ ssh 키 파일 권한 변경 1) # chmod 600 ~/.ssh/키 파일"
 
     local vuln_found=false
     local checked_any=false
@@ -371,7 +371,7 @@ check_CSAP_Ceph_03() {
     local detail=""
     local cmd="ls -l /ceph.conf"
     local cur_state=""
-    local remediation="￭ Ceph 설정 파일 권한 변경 1\) # chmod o-w [Ceph 설정 디렉터리]/ceph.conf"
+    local remediation="￭ Ceph 설정 파일 권한 변경 1) # chmod o-w [Ceph 설정 디렉터리]/ceph.conf"
 
     local vuln_found=false
     local checked_any=false
@@ -420,7 +420,7 @@ check_CSAP_Ceph_04() {
     local detail=""
     local cmd="cat /ceph.conf"
     local cur_state=""
-    local remediation="￭ 설정 파일에서 [global] 영역에 CEPHX 프로토콜 적용 1\) # vi [Ceph 설정 디렉터리]/ceph.conf"
+    local remediation="￭ 설정 파일에서 [global] 영역에 CEPHX 프로토콜 적용 1) # vi [Ceph 설정 디렉터리]/ceph.conf"
 
     local output
     output=$({
@@ -481,7 +481,7 @@ check_CSAP_Ceph_05() {
     local detail=""
     local cmd="cat /etc/sudoers"
     local cur_state=""
-    local remediation="￭ 별도의 관리자 계정 생성 예시\) 1\) 계정 생성 # useradd admin 2\) 생성된 계정에 관리자 계정 부여 # chmod 660 /etc/sudoers 명령어를 통해 sudoers 파일 쓰기 권한 부여 # vi /etc/sudoers 명령어 입력 후 아래와 같이 작성 # chmod 440 /etc/sudoers 명령어를 통해 sudoers 파일 쓰기 권한 제거"
+    local remediation="￭ 별도의 관리자 계정 생성 예시) 1) 계정 생성 # useradd admin 2) 생성된 계정에 관리자 계정 부여 # chmod 660 /etc/sudoers 명령어를 통해 sudoers 파일 쓰기 권한 부여 # vi /etc/sudoers 명령어 입력 후 아래와 같이 작성 # chmod 440 /etc/sudoers 명령어를 통해 sudoers 파일 쓰기 권한 제거"
 
     local output
     output=$({
@@ -539,7 +539,7 @@ check_CSAP_Ceph_06() {
     local detail=""
     local cmd="getenforce"
     local cur_state=""
-    local remediation="￭ SELinux 활성화 1\) # vi /etc/selinux/config"
+    local remediation="￭ SELinux 활성화 1) # vi /etc/selinux/config"
 
     local output
     output=$({
@@ -600,7 +600,7 @@ check_CSAP_Ceph_07() {
     local detail=""
     local cmd="ceph -v"
     local cur_state=""
-    local remediation="￭ 최신 보안 패치 적용 1\) 최신 보안 패치 업데이트가 발표되었을 경우, 시스템 영향도를 파악하여 충분한 테스트를 진행한 후 적용 권고 ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
+    local remediation="￭ 최신 보안 패치 적용 1) 최신 보안 패치 업데이트가 발표되었을 경우, 시스템 영향도를 파악하여 충분한 테스트를 진행한 후 적용 권고 ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
 
     local output
     output=$({

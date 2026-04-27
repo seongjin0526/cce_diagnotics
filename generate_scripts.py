@@ -601,11 +601,7 @@ def escape_bash_string(s):
     s = s.replace('"', '\\"')
     s = s.replace('$', '\\$')
     s = s.replace('`', '\\`')
-    s = s.replace('!', '\\!')
     s = s.replace('\t', ' ')
-    # Remove/escape problematic shell chars
-    s = s.replace('(', '\\(')
-    s = s.replace(')', '\\)')
     # Collapse multiple spaces and newlines
     s = re.sub(r'\n', ' ', s)
     s = re.sub(r'\s{2,}', ' ', s)
@@ -825,6 +821,10 @@ def _generate_special_bash_check(lines, item, diag, commands, good_criteria, bad
     platform = app_def.get('platform', '')
     code = item['code'].split('/')[0].strip()
 
+    if platform == 'Docker':
+        return _generate_docker_special_check(lines, code)
+    if platform in ('Kubernetes(Master)', 'Kubernetes(Worker)'):
+        return _generate_k8s_special_check(lines, code, platform)
     if platform == 'MySQL':
         return _generate_mysql_special_check(lines, code)
     if platform == 'MongoDB':
@@ -833,6 +833,322 @@ def _generate_special_bash_check(lines, item, diag, commands, good_criteria, bad
         return _generate_redis_special_check(lines, code)
     if platform == 'Elasticsearch':
         return _generate_elasticsearch_special_check(lines, code)
+    return False
+
+
+def _append_k8s_manifest_setup(lines, cmd, file_vars):
+    lines.append(f'    cmd="{escape_bash_string(cmd)}"')
+    for var_name, expr in file_vars:
+        lines.append(f'    local {var_name}="{expr}"')
+    lines.append('    local output')
+    file_refs = ' '.join(f'"${var_name}"' for var_name, _ in file_vars)
+    lines.append(f'    output=$(k8s_collect_files {file_refs})')
+    lines.append('    cur_state="${output:-Kubernetes 설정 파일 없음}"')
+
+
+def _append_k8s_missing_check(lines, file_vars):
+    missing_expr = ' || '.join(f'[ ! -f "${var_name}" ]' for var_name, _ in file_vars)
+    lines.append(f'    if {missing_expr}; then')
+    lines.append('        status="N/A"')
+    lines.append('        detail="Kubernetes 설정 파일을 찾지 못했습니다."')
+    lines.append('    else')
+
+
+def _append_k8s_close(lines):
+    lines.append('    fi')
+
+
+def _generate_k8s_special_check(lines, code, platform):
+    if platform == 'Kubernetes(Master)':
+        manifest_dir = '${K8S_MANIFEST_DIR:-/etc/kubernetes/manifests}'
+        api = ('api_manifest', f'{manifest_dir}/kube-apiserver.yaml')
+        scheduler = ('scheduler_manifest', f'{manifest_dir}/kube-scheduler.yaml')
+        controller = ('controller_manifest', f'{manifest_dir}/kube-controller-manager.yaml')
+        etcd = ('etcd_manifest', f'{manifest_dir}/etcd.yaml')
+
+        if code == 'CSAP-K8sMaster-01':
+            _append_k8s_manifest_setup(lines, 'grep -E "anonymous-auth|service-account-lookup" kube-apiserver.yaml', [api])
+            _append_k8s_missing_check(lines, [api])
+            lines.append('        if k8s_has "--anonymous-auth(=|[[:space:]]+)false" "$api_manifest" && k8s_has "--service-account-lookup(=|[[:space:]]+)true" "$api_manifest"; then')
+            lines.append('            status="양호"')
+            lines.append('            detail="API server 비인증 접근 차단 설정을 확인했습니다."')
+            lines.append('        else')
+            lines.append('            status="취약"')
+            lines.append('            detail="--anonymous-auth=false 또는 --service-account-lookup=true 설정을 확인하지 못했습니다."')
+            lines.append('        fi')
+            _append_k8s_close(lines)
+            return True
+
+        if code == 'CSAP-K8sMaster-02':
+            _append_k8s_manifest_setup(lines, 'grep -E "token-auth-file" kube-apiserver.yaml', [api])
+            _append_k8s_missing_check(lines, [api])
+            lines.append('        if k8s_has "--token-auth-file" "$api_manifest"; then')
+            lines.append('            status="취약"')
+            lines.append('            detail="취약한 token-auth-file 인증 방식이 설정되어 있습니다."')
+            lines.append('        else')
+            lines.append('            status="양호"')
+            lines.append('            detail="token-auth-file 인증 방식을 확인하지 못했습니다."')
+            lines.append('        fi')
+            _append_k8s_close(lines)
+            return True
+
+        if code == 'CSAP-K8sMaster-03':
+            _append_k8s_manifest_setup(lines, 'grep -E "bind-address" kube-scheduler.yaml kube-controller-manager.yaml', [scheduler, controller])
+            _append_k8s_missing_check(lines, [scheduler, controller])
+            lines.append("        if k8s_has \"--bind-address(=|[[:space:]]+)(0\\.0\\.0\\.0|::|\\\"\\\"|'')\" \"$scheduler_manifest\" \"$controller_manifest\"; then")
+            lines.append('            status="취약"')
+            lines.append('            detail="scheduler/controller-manager API가 전체 인터페이스에 바인드되어 있습니다."')
+            lines.append('        elif k8s_has "--bind-address(=|[[:space:]]+)(127\\.0\\.0\\.1|localhost|::1)" "$scheduler_manifest" && k8s_has "--bind-address(=|[[:space:]]+)(127\\.0\\.0\\.1|localhost|::1)" "$controller_manifest"; then')
+            lines.append('            status="양호"')
+            lines.append('            detail="scheduler/controller-manager API bind-address가 로컬 주소로 제한되어 있습니다."')
+            lines.append('        else')
+            lines.append('            status="취약"')
+            lines.append('            detail="scheduler/controller-manager bind-address 제한 설정을 확인하지 못했습니다."')
+            lines.append('        fi')
+            _append_k8s_close(lines)
+            return True
+
+        if code == 'CSAP-K8sMaster-04':
+            _append_k8s_manifest_setup(lines, 'grep -E "authorization-mode" kube-apiserver.yaml', [api])
+            _append_k8s_missing_check(lines, [api])
+            lines.append('        if k8s_has "--authorization-mode(=|[[:space:]]+)[^[:space:]]*AlwaysAllow" "$api_manifest"; then')
+            lines.append('            status="취약"')
+            lines.append('            detail="API server authorization-mode에 AlwaysAllow가 포함되어 있습니다."')
+            lines.append('        elif k8s_has "--authorization-mode" "$api_manifest"; then')
+            lines.append('            status="양호"')
+            lines.append('            detail="API server authorization-mode가 AlwaysAllow 이외 값으로 설정되어 있습니다."')
+            lines.append('        else')
+            lines.append('            status="취약"')
+            lines.append('            detail="API server authorization-mode 설정을 확인하지 못했습니다."')
+            lines.append('        fi')
+            _append_k8s_close(lines)
+            return True
+
+        if code == 'CSAP-K8sMaster-05':
+            _append_k8s_manifest_setup(lines, 'grep -E "admission-control-config-file|enable-admission-plugins|disable-admission-plugins" kube-apiserver.yaml', [api])
+            _append_k8s_missing_check(lines, [api])
+            lines.append('        if k8s_has "--disable-admission-plugins=.*(NodeRestriction|PodSecurity|PodSecurityPolicy|SecurityContextDeny)" "$api_manifest"; then')
+            lines.append('            status="취약"')
+            lines.append('            detail="필수 Admission Control Plugin이 비활성화되어 있습니다."')
+            lines.append('        elif k8s_has "--enable-admission-plugins=.*(NodeRestriction|PodSecurity|PodSecurityPolicy|SecurityContextDeny)" "$api_manifest" || k8s_has "--admission-control-config-file" "$api_manifest"; then')
+            lines.append('            status="양호"')
+            lines.append('            detail="Admission Control Plugin 또는 설정 파일 적용을 확인했습니다."')
+            lines.append('        else')
+            lines.append('            status="취약"')
+            lines.append('            detail="Admission Control Plugin 적용 설정을 확인하지 못했습니다."')
+            lines.append('        fi')
+            _append_k8s_close(lines)
+            return True
+
+        if code == 'CSAP-K8sMaster-06':
+            _append_k8s_manifest_setup(lines, 'grep -E "secure-port|certificate-authority|client-certificate|client-key|tls-cert-file|tls-private-key-file|client-ca-file|tls-cipher-suites" kube-apiserver.yaml', [api])
+            _append_k8s_missing_check(lines, [api])
+            lines.append('        if k8s_has "--secure-port(=|[[:space:]]+)0" "$api_manifest"; then')
+            lines.append('            status="취약"')
+            lines.append('            detail="API server secure-port가 0으로 비활성화되어 있습니다."')
+            lines.append('        elif k8s_has "--secure-port" "$api_manifest" "$api_manifest" && k8s_has "--kubelet-certificate-authority" "$api_manifest" && k8s_has "--kubelet-client-certificate" "$api_manifest" && k8s_has "--kubelet-client-key" "$api_manifest" && k8s_has "--tls-cert-file" "$api_manifest" && k8s_has "--tls-private-key-file" "$api_manifest" && k8s_has "--client-ca-file" "$api_manifest" && k8s_has "--tls-cipher-suites" "$api_manifest"; then')
+            lines.append('            status="양호"')
+            lines.append('            detail="API server TLS 인증서 및 cipher suite 설정을 확인했습니다."')
+            lines.append('        else')
+            lines.append('            status="취약"')
+            lines.append('            detail="API server TLS 필수 설정을 모두 확인하지 못했습니다."')
+            lines.append('        fi')
+            _append_k8s_close(lines)
+            return True
+
+        if code == 'CSAP-K8sMaster-07':
+            _append_k8s_manifest_setup(lines, 'grep -E "audit-log|audit-policy" kube-apiserver.yaml', [api])
+            _append_k8s_missing_check(lines, [api])
+            lines.append('        if k8s_has "--audit-log-path" "$api_manifest" && k8s_has "--audit-policy-file" "$api_manifest" && k8s_has "--audit-log-maxage" "$api_manifest" && k8s_has "--audit-log-maxbackup" "$api_manifest" && k8s_has "--audit-log-maxsize" "$api_manifest"; then')
+            lines.append('            status="양호"')
+            lines.append('            detail="API server 감사 로그 경로, 정책, 보관 설정을 확인했습니다."')
+            lines.append('        else')
+            lines.append('            status="취약"')
+            lines.append('            detail="API server 감사 로그 필수 설정을 모두 확인하지 못했습니다."')
+            lines.append('        fi')
+            _append_k8s_close(lines)
+            return True
+
+        if code == 'CSAP-K8sMaster-08':
+            _append_k8s_manifest_setup(lines, 'grep -E "use-service-account-credentials|service-account-private-key-file" kube-controller-manager.yaml', [controller])
+            _append_k8s_missing_check(lines, [controller])
+            lines.append('        if k8s_has "--use-service-account-credentials(=|[[:space:]]+)true" "$controller_manifest" && k8s_has "--service-account-private-key-file" "$controller_manifest"; then')
+            lines.append('            status="양호"')
+            lines.append('            detail="Controller Manager 서비스 계정 자격증명 설정을 확인했습니다."')
+            lines.append('        else')
+            lines.append('            status="취약"')
+            lines.append('            detail="Controller Manager 서비스 계정 자격증명 설정을 확인하지 못했습니다."')
+            lines.append('        fi')
+            _append_k8s_close(lines)
+            return True
+
+        if code == 'CSAP-K8sMaster-09':
+            _append_k8s_manifest_setup(lines, 'grep -E "root-ca-file|feature-gates|RotateKubeletServerCertificate" kube-controller-manager.yaml', [controller])
+            _append_k8s_missing_check(lines, [controller])
+            lines.append('        if k8s_has "--root-ca-file" "$controller_manifest" && k8s_has "RotateKubeletServerCertificate=true" "$controller_manifest"; then')
+            lines.append('            status="양호"')
+            lines.append('            detail="Controller Manager root CA 및 인증서 회전 설정을 확인했습니다."')
+            lines.append('        else')
+            lines.append('            status="취약"')
+            lines.append('            detail="Controller Manager SSL/TLS 필수 설정을 확인하지 못했습니다."')
+            lines.append('        fi')
+            _append_k8s_close(lines)
+            return True
+
+        if code == 'CSAP-K8sMaster-10':
+            _append_k8s_manifest_setup(lines, 'grep -E "encryption-provider-config" kube-apiserver.yaml', [api])
+            _append_k8s_missing_check(lines, [api])
+            lines.append('        local enc_config')
+            lines.append('        enc_config=$(k8s_collect_files "$api_manifest" | sed -n \'s/.*--encryption-provider-config[= ]\\([^[:space:]]*\\).*/\\1/p\' | head -1)')
+            lines.append('        if [ -z "$enc_config" ]; then')
+            lines.append('            status="취약"')
+            lines.append('            detail="API server encryption-provider-config 설정을 확인하지 못했습니다."')
+            lines.append('        elif [ -f "$enc_config" ]; then')
+            lines.append('            local enc_output')
+            lines.append('            enc_output=$(k8s_collect_files "$enc_config")')
+            lines.append('            cur_state="${cur_state} ${enc_output}"')
+            lines.append('            if printf \'%s\\n\' "$enc_output" | grep -Eiq "identity:"; then')
+            lines.append('                status="취약"')
+            lines.append('                detail="etcd 암호화 provider에 identity가 포함되어 있습니다."')
+            lines.append('            elif printf \'%s\\n\' "$enc_output" | grep -Eiq "aescbc:|kms:|secretbox:"; then')
+            lines.append('                status="양호"')
+            lines.append('                detail="안전한 etcd 암호화 provider 설정을 확인했습니다."')
+            lines.append('            else')
+            lines.append('                status="취약"')
+            lines.append('                detail="안전한 etcd 암호화 provider를 확인하지 못했습니다."')
+            lines.append('            fi')
+            lines.append('        else')
+            lines.append('            status="수동점검"')
+            lines.append('            detail="encryption-provider-config 경로는 확인했지만 파일을 읽지 못했습니다: $enc_config"')
+            lines.append('        fi')
+            _append_k8s_close(lines)
+            return True
+
+        if code == 'CSAP-K8sMaster-11':
+            _append_k8s_manifest_setup(lines, 'grep -E "client-cert-auth|cert-file|key-file|trusted-ca-file|auto-tls|etcd-certfile|etcd-keyfile|etcd-cafile" etcd.yaml kube-apiserver.yaml', [etcd, api])
+            _append_k8s_missing_check(lines, [etcd, api])
+            lines.append('        if k8s_has "--auto-tls(=|[[:space:]]+)true|--peer-auto-tls(=|[[:space:]]+)true" "$etcd_manifest"; then')
+            lines.append('            status="취약"')
+            lines.append('            detail="etcd auto-tls 또는 peer-auto-tls가 활성화되어 있습니다."')
+            lines.append('        elif k8s_has "--client-cert-auth(=|[[:space:]]+)true" "$etcd_manifest" && k8s_has "--peer-client-cert-auth(=|[[:space:]]+)true" "$etcd_manifest" && k8s_has "--cert-file" "$etcd_manifest" && k8s_has "--key-file" "$etcd_manifest" && k8s_has "--peer-cert-file" "$etcd_manifest" && k8s_has "--peer-key-file" "$etcd_manifest" && k8s_has "--trusted-ca-file" "$etcd_manifest" && k8s_has "--etcd-certfile" "$api_manifest" && k8s_has "--etcd-keyfile" "$api_manifest" && k8s_has "--etcd-cafile" "$api_manifest"; then')
+            lines.append('            status="양호"')
+            lines.append('            detail="etcd peer/client TLS 인증 설정을 확인했습니다."')
+            lines.append('        else')
+            lines.append('            status="취약"')
+            lines.append('            detail="etcd TLS 필수 설정을 모두 확인하지 못했습니다."')
+            lines.append('        fi')
+            _append_k8s_close(lines)
+            return True
+
+    if platform == 'Kubernetes(Worker)':
+        kubelet_conf = ('kubelet_conf', '${KUBELET_CONF:-/var/lib/kubelet/config.yaml}')
+        kubelet_service = ('kubelet_service_conf', '${KUBELET_SERVICE_CONF:-/usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf}')
+
+        if code == 'CSAP-K8sWorker-01':
+            _append_k8s_manifest_setup(lines, 'grep -E "anonymous|readOnlyPort|read-only-port" kubelet config/service', [kubelet_conf, kubelet_service])
+            _append_k8s_missing_check(lines, [kubelet_conf])
+            lines.append('        if (k8s_has "anonymous:[[:space:]]*$" "$kubelet_conf" && k8s_has "enabled:[[:space:]]*false" "$kubelet_conf" || k8s_has "--anonymous-auth(=|[[:space:]]+)false" "$kubelet_service_conf" "$kubelet_conf") && (k8s_has "readOnlyPort:[[:space:]]*0" "$kubelet_conf" || k8s_has "--read-only-port(=|[[:space:]]+)0" "$kubelet_service_conf" "$kubelet_conf"); then')
+            lines.append('            status="양호"')
+            lines.append('            detail="Kubelet anonymous-auth 비활성화 및 read-only-port 0 설정을 확인했습니다."')
+            lines.append('        else')
+            lines.append('            status="취약"')
+            lines.append('            detail="Kubelet anonymous-auth=false 또는 read-only-port=0 설정을 확인하지 못했습니다."')
+            lines.append('        fi')
+            _append_k8s_close(lines)
+            return True
+
+        if code == 'CSAP-K8sWorker-02':
+            _append_k8s_manifest_setup(lines, 'grep -E "authorization-mode|authorization:|mode:" kubelet config/service', [kubelet_conf, kubelet_service])
+            _append_k8s_missing_check(lines, [kubelet_conf])
+            lines.append('        if k8s_has "AlwaysAllow" "$kubelet_conf" "$kubelet_service_conf"; then')
+            lines.append('            status="취약"')
+            lines.append('            detail="Kubelet authorization mode가 AlwaysAllow로 설정되어 있습니다."')
+            lines.append('        elif k8s_has "authorizationMode:[[:space:]]*(Webhook|Node)|mode:[[:space:]]*(Webhook|Node)|--authorization-mode(=|[[:space:]]+)(Webhook|Node)" "$kubelet_conf" "$kubelet_service_conf"; then')
+            lines.append('            status="양호"')
+            lines.append('            detail="Kubelet authorization mode가 AlwaysAllow 이외 값으로 설정되어 있습니다."')
+            lines.append('        else')
+            lines.append('            status="취약"')
+            lines.append('            detail="Kubelet authorization mode 설정을 확인하지 못했습니다."')
+            lines.append('        fi')
+            _append_k8s_close(lines)
+            return True
+
+        if code == 'CSAP-K8sWorker-03':
+            _append_k8s_manifest_setup(lines, 'grep -E "clientCAFile|tlsCertFile|tlsPrivateKeyFile|tlsCipherSuites|serverTLSBootstrap|rotateCertificates|hostname-override" kubelet config/service', [kubelet_conf, kubelet_service])
+            _append_k8s_missing_check(lines, [kubelet_conf])
+            lines.append('        if k8s_has "--hostname-override" "$kubelet_service_conf" "$kubelet_conf"; then')
+            lines.append('            status="취약"')
+            lines.append('            detail="Kubelet hostname-override 설정이 존재합니다."')
+            lines.append('        elif k8s_has "clientCAFile:[[:space:]]*[^[:space:]]+" "$kubelet_conf" && (k8s_has "tlsCertFile:[[:space:]]*[^[:space:]]+" "$kubelet_conf" && k8s_has "tlsPrivateKeyFile:[[:space:]]*[^[:space:]]+" "$kubelet_conf" || k8s_has "serverTLSBootstrap:[[:space:]]*true|rotateCertificates:[[:space:]]*true" "$kubelet_conf") && k8s_has "tlsCipherSuites:" "$kubelet_conf"; then')
+            lines.append('            status="양호"')
+            lines.append('            detail="Kubelet TLS 인증서, CA, cipher suite 설정을 확인했습니다."')
+            lines.append('        else')
+            lines.append('            status="취약"')
+            lines.append('            detail="Kubelet SSL/TLS 필수 설정을 모두 확인하지 못했습니다."')
+            lines.append('        fi')
+            _append_k8s_close(lines)
+            return True
+
+        if code == 'CSAP-K8sWorker-04':
+            _append_k8s_manifest_setup(lines, 'grep -E "protectKernelDefaults|protect-kernel-defaults" kubelet config/service', [kubelet_conf, kubelet_service])
+            _append_k8s_missing_check(lines, [kubelet_conf])
+            lines.append('        if k8s_has "protectKernelDefaults:[[:space:]]*true|--protect-kernel-defaults(=|[[:space:]]+)true" "$kubelet_conf" "$kubelet_service_conf"; then')
+            lines.append('            status="양호"')
+            lines.append('            detail="Kubelet protectKernelDefaults=true 설정을 확인했습니다."')
+            lines.append('        else')
+            lines.append('            status="취약"')
+            lines.append('            detail="Kubelet protectKernelDefaults=true 설정을 확인하지 못했습니다."')
+            lines.append('        fi')
+            _append_k8s_close(lines)
+            return True
+
+    return False
+
+
+def _generate_docker_special_check(lines, code):
+    if code == 'CSAP-Docker-02':
+        lines.append('    cmd="getent group docker dockerroot root; grep -E \\"^(docker|dockerroot|root):\\" /etc/group"')
+        lines.append('    local group_output')
+        lines.append('    local extra_members')
+        lines.append('    group_output=$({ getent group docker dockerroot root 2>/dev/null; grep -E "^(docker|dockerroot|root):" /etc/group 2>/dev/null; } | awk -F: \'!seen[$1]++\' | head -20)')
+        lines.append('    cur_state="${group_output:-그룹 정보 없음}"')
+        lines.append('    extra_members=$(printf \'%s\\n\' "$group_output" | awk -F: \'$1=="docker" || $1=="dockerroot" || $1=="root" { n=split($4, members, ","); for (i=1; i<=n; i++) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", members[i]); if (members[i] != "" && members[i] != "root" && !seen[members[i]]++) { if (out != "") out=out ","; out=out members[i]; } } } END { print out }\')')
+        lines.append('    if [ -n "$extra_members" ]; then')
+        lines.append('        status="취약"')
+        lines.append('        detail="docker/dockerroot/root 그룹에 불필요할 수 있는 사용자($extra_members)가 포함되어 있습니다."')
+        lines.append('    else')
+        lines.append('        status="양호"')
+        lines.append('        detail="docker/dockerroot/root 그룹에 root 이외 추가 사용자를 확인하지 못했습니다."')
+        lines.append('    fi')
+        return True
+
+    docker_audit_targets = {
+        'CSAP-Docker-03': ('/usr/bin/docker', '/usr/bin/docker 파일에 감사 설정이 적용되어 있습니다.', '/usr/bin/docker 파일에 감사 설정을 확인하지 못했습니다.'),
+        'CSAP-Docker-04': ('/var/lib/docker', '/var/lib/docker 디렉터리에 감사 설정이 적용되어 있습니다.', '/var/lib/docker 디렉터리에 감사 설정을 확인하지 못했습니다.'),
+        'CSAP-Docker-05': ('/etc/docker', '/etc/docker 디렉터리에 감사 설정이 적용되어 있습니다.', '/etc/docker 디렉터리에 감사 설정을 확인하지 못했습니다.'),
+        'CSAP-Docker-06': ('/lib/systemd/system/docker.service', 'docker.service 파일에 감사 설정이 적용되어 있습니다.', 'docker.service 파일에 감사 설정을 확인하지 못했습니다.'),
+        'CSAP-Docker-07': ('/lib/systemd/system/docker.socket', 'docker.socket 파일에 감사 설정이 적용되어 있습니다.', 'docker.socket 파일에 감사 설정을 확인하지 못했습니다.'),
+        'CSAP-Docker-08': ('/etc/default/docker', '/etc/default/docker 파일에 감사 설정이 적용되어 있습니다.', '/etc/default/docker 파일에 감사 설정을 확인하지 못했습니다.'),
+    }
+    if code in docker_audit_targets:
+        target, good_detail, bad_detail = docker_audit_targets[code]
+        target_safe = escape_bash_string(target)
+        good_safe = escape_bash_string(good_detail)
+        bad_safe = escape_bash_string(bad_detail)
+        lines.append(f'    cmd="auditctl -l | grep -F -- \\"{target_safe}\\"; grep -RhsF -- \\"{target_safe}\\" /etc/audit/rules.d /etc/audit/audit.rules"')
+        lines.append(f'    local audit_target="{target_safe}"')
+        lines.append('    local output')
+        lines.append('    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; grep -RhsF -- "$audit_target" /etc/audit/rules.d /etc/audit/audit.rules 2>/dev/null; } | sed \'/^$/d\' | head -20)')
+        lines.append('    cur_state="${output:-감사 규칙 없음}"')
+        lines.append('    if [ -n "$output" ]; then')
+        lines.append('        status="양호"')
+        lines.append(f'        detail="{good_safe}"')
+        lines.append('    else')
+        lines.append('        status="취약"')
+        lines.append(f'        detail="{bad_safe}"')
+        lines.append('    fi')
+        return True
+
     return False
 
 
@@ -2720,7 +3036,7 @@ add_result() {
     current_state=$(sanitize_json_value "$current_state")
     remediation=$(sanitize_json_value "$remediation")
 
-    echo "{\\"code\\":\\"$code\\",\\"category\\":\\"$category\\",\\"title\\":\\"$title\\",\\"importance\\":\\"$importance\\",\\"status\\":\\"$status\\",\\"detail\\":\\"$detail\\",\\"source\\":\\"$source\\",\\"command\\":\\"$command\\",\\"current_state\\":\\"$current_state\\",\\"remediation\\":\\"$remediation\\"}" >> "$RESULTS_FILE"
+    printf '%s\\n' "{\\"code\\":\\"$code\\",\\"category\\":\\"$category\\",\\"title\\":\\"$title\\",\\"importance\\":\\"$importance\\",\\"status\\":\\"$status\\",\\"detail\\":\\"$detail\\",\\"source\\":\\"$source\\",\\"command\\":\\"$command\\",\\"current_state\\":\\"$current_state\\",\\"remediation\\":\\"$remediation\\"}" >> "$RESULTS_FILE"
     log_result_trace "$code" "$status" "$title" "$raw_command" "$raw_current_state" "$raw_detail"
 }
 
@@ -2946,6 +3262,20 @@ run_docker_cmd() {
         'k8s_helper': '''# --- Kubernetes helper ---
 run_kubectl() {
     kubectl "$@" 2>/dev/null
+}
+
+k8s_collect_files() {
+    for file in "$@"; do
+        [ -f "$file" ] || continue
+        printf 'FILE:%s\\n' "$file"
+        grep -Ev '^[[:space:]]*#' "$file" 2>/dev/null | head -240
+    done
+}
+
+k8s_has() {
+    pattern="$1"
+    shift
+    k8s_collect_files "$@" | grep -Eiq -- "$pattern"
 }
 
 ''',

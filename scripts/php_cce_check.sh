@@ -255,7 +255,7 @@ check_CSAP_PHP_01() {
     local detail=""
     local cmd="cat //php.ini | grep display_errors"
     local cur_state=""
-    local remediation="￭ PHP 설정 파일에서 수정 1\) # vi /[PHP 설치 디렉터리]/php.ini display_errors = Off"
+    local remediation="￭ PHP 설정 파일에서 수정 1) # vi /[PHP 설치 디렉터리]/php.ini display_errors = Off"
 
     local config_file="${PHP_INI:-/usr/local/etc/php/php.ini}"
     [ -n "${PHP_INI:-}" ] && config_file="${PHP_INI}"
@@ -325,7 +325,7 @@ check_CSAP_PHP_02() {
     local detail=""
     local cmd="cat //php.ini | grep expose_php"
     local cur_state=""
-    local remediation="￭ PHP 설정 파일에서 수정 1\) # vi /[PHP 설치 디렉터리]/php.ini expose_php = Off"
+    local remediation="￭ PHP 설정 파일에서 수정 1) # vi /[PHP 설치 디렉터리]/php.ini expose_php = Off"
 
     local config_file="${PHP_INI:-/usr/local/etc/php/php.ini}"
     [ -n "${PHP_INI:-}" ] && config_file="${PHP_INI}"
@@ -395,7 +395,7 @@ check_CSAP_PHP_03() {
     local detail=""
     local cmd="cat //php.ini | grep allow_url_fopen"
     local cur_state=""
-    local remediation="￭ PHP 설정 파일에서 수정 1\) # vi /[PHP 설치 디렉터리]/php.ini expose_php = Off"
+    local remediation="￭ PHP 설정 파일에서 수정 1) # vi /[PHP 설치 디렉터리]/php.ini expose_php = Off"
 
     local config_file="${PHP_INI:-/usr/local/etc/php/php.ini}"
     [ -n "${PHP_INI:-}" ] && config_file="${PHP_INI}"
@@ -465,7 +465,7 @@ check_CSAP_PHP_04() {
     local detail=""
     local cmd="cat //php.ini | grep disable_functions; exec -"
     local cur_state=""
-    local remediation="￭ PHP 설정 파일에서 수정 1\) # vi /[PHP 설치 디렉터리]/php.ini 예시\) disable_functions = exec, passthru, shell_exec, system, proc_open, popen, curl_exec, curl_multi_exec, parse_ini_file, show_source"
+    local remediation="￭ PHP 설정 파일에서 수정 1) # vi /[PHP 설치 디렉터리]/php.ini 예시) disable_functions = exec, passthru, shell_exec, system, proc_open, popen, curl_exec, curl_multi_exec, parse_ini_file, show_source"
 
     local config_file="${PHP_INI:-/usr/local/etc/php/php.ini}"
     [ -n "${PHP_INI:-}" ] && config_file="${PHP_INI}"
@@ -483,7 +483,7 @@ check_CSAP_PHP_04() {
         cur_state="$grep_result"
     if [ -z "$output" ]; then
         status="양호"
-        detail="disable_functions에 설정\(불필요한"
+        detail="disable_functions에 설정(불필요한"
     else
         if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
             local default_text
@@ -513,7 +513,7 @@ check_CSAP_PHP_04() {
         else
         if output_has_negative_marker "$output"; then
             status="양호"
-            detail="disable_functions에 설정\(불필요한"
+            detail="disable_functions에 설정(불필요한"
         elif output_has_positive_marker "$output"; then
             status="취약"
             detail="disable_functions에 설정이 존재하지"
@@ -535,7 +535,7 @@ check_CSAP_PHP_05() {
     local detail=""
     local cmd="cat //php.ini | grep open_basedir"
     local cur_state=""
-    local remediation="￭ PHP 설정 파일에서 수정 1\) # vi /[PHP 설치 디렉터리]/php.ini"
+    local remediation="￭ PHP 설정 파일에서 수정 1) # vi /[PHP 설치 디렉터리]/php.ini"
 
     local config_file="${PHP_INI:-/usr/local/etc/php/php.ini}"
     [ -n "${PHP_INI:-}" ] && config_file="${PHP_INI}"

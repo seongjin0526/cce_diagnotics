@@ -84,7 +84,7 @@ add_result() {
     current_state=$(sanitize_json_value "$current_state")
     remediation=$(sanitize_json_value "$remediation")
 
-    echo "{\"code\":\"$code\",\"category\":\"$category\",\"title\":\"$title\",\"importance\":\"$importance\",\"status\":\"$status\",\"detail\":\"$detail\",\"source\":\"$source\",\"command\":\"$command\",\"current_state\":\"$current_state\",\"remediation\":\"$remediation\"}" >> "$RESULTS_FILE"
+    printf '%s\n' "{\"code\":\"$code\",\"category\":\"$category\",\"title\":\"$title\",\"importance\":\"$importance\",\"status\":\"$status\",\"detail\":\"$detail\",\"source\":\"$source\",\"command\":\"$command\",\"current_state\":\"$current_state\",\"remediation\":\"$remediation\"}" >> "$RESULTS_FILE"
     log_result_trace "$code" "$status" "$title" "$raw_command" "$raw_current_state" "$raw_detail"
 }
 
@@ -135,6 +135,20 @@ is_service_active() {
 # --- Kubernetes helper ---
 run_kubectl() {
     kubectl "$@" 2>/dev/null
+}
+
+k8s_collect_files() {
+    for file in "$@"; do
+        [ -f "$file" ] || continue
+        printf 'FILE:%s\n' "$file"
+        grep -Ev '^[[:space:]]*#' "$file" 2>/dev/null | head -240
+    done
+}
+
+k8s_has() {
+    pattern="$1"
+    shift
+    k8s_collect_files "$@" | grep -Eiq -- "$pattern"
 }
 
 
@@ -192,11 +206,25 @@ check_CSAP_K8sMaster_01() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 비인증 접근 차단 1\) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래와 같이 설정 - --anonynous-auth=false 2\) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래와 같이 설정 - --service-account-lookup=true"
+    local remediation="￭ 비인증 접근 차단 1) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래와 같이 설정 - --anonynous-auth=false 2) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래와 같이 설정 - --service-account-lookup=true"
 
-    status="수동점검"
-    detail="수동 점검 필요 항목입니다. API server 비인증 접근을 차단한 경우"
-    cur_state="수동점검 필요"
+    cmd="grep -E \"anonymous-auth|service-account-lookup\" kube-apiserver.yaml"
+    local api_manifest="${K8S_MANIFEST_DIR:-/etc/kubernetes/manifests}/kube-apiserver.yaml"
+    local output
+    output=$(k8s_collect_files "$api_manifest")
+    cur_state="${output:-Kubernetes 설정 파일 없음}"
+    if [ ! -f "$api_manifest" ]; then
+        status="N/A"
+        detail="Kubernetes 설정 파일을 찾지 못했습니다."
+    else
+        if k8s_has "--anonymous-auth(=|[[:space:]]+)false" "$api_manifest" && k8s_has "--service-account-lookup(=|[[:space:]]+)true" "$api_manifest"; then
+            status="양호"
+            detail="API server 비인증 접근 차단 설정을 확인했습니다."
+        else
+            status="취약"
+            detail="--anonymous-auth=false 또는 --service-account-lookup=true 설정을 확인하지 못했습니다."
+        fi
+    fi
 
     add_result "CSAP-K8sMaster-01" "패치 관리" "API sever 비인증 접근 차단" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -207,11 +235,25 @@ check_CSAP_K8sMaster_02() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 취약한 방식의 인증 사용 제한 1\) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 확인 - --token-auth-file 파라미터가 존재할 경우, 해당 파라미터 삭제"
+    local remediation="￭ 취약한 방식의 인증 사용 제한 1) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 확인 - --token-auth-file 파라미터가 존재할 경우, 해당 파라미터 삭제"
 
-    status="수동점검"
-    detail="수동 점검 필요 항목입니다. API sever"
-    cur_state="수동점검 필요"
+    cmd="grep -E \"token-auth-file\" kube-apiserver.yaml"
+    local api_manifest="${K8S_MANIFEST_DIR:-/etc/kubernetes/manifests}/kube-apiserver.yaml"
+    local output
+    output=$(k8s_collect_files "$api_manifest")
+    cur_state="${output:-Kubernetes 설정 파일 없음}"
+    if [ ! -f "$api_manifest" ]; then
+        status="N/A"
+        detail="Kubernetes 설정 파일을 찾지 못했습니다."
+    else
+        if k8s_has "--token-auth-file" "$api_manifest"; then
+            status="취약"
+            detail="취약한 token-auth-file 인증 방식이 설정되어 있습니다."
+        else
+            status="양호"
+            detail="token-auth-file 인증 방식을 확인하지 못했습니다."
+        fi
+    fi
 
     add_result "CSAP-K8sMaster-02" "" "API server 취약한 방식의 인증 사용 제한" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -222,11 +264,29 @@ check_CSAP_K8sMaster_03() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 서비스 API 외부 오픈 금지 1\) scheduler API 서비스 etc/kubernetes/manifests/kube-scheduler.yaml 파일 내 아래와 같이 설정 2\) controller manager API 서비스 etc/kubernetes/manifests/kube-controller-manager.yaml 파일 내 아래와 같이 설정"
+    local remediation="￭ 서비스 API 외부 오픈 금지 1) scheduler API 서비스 etc/kubernetes/manifests/kube-scheduler.yaml 파일 내 아래와 같이 설정 2) controller manager API 서비스 etc/kubernetes/manifests/kube-controller-manager.yaml 파일 내 아래와 같이 설정"
 
-    status="수동점검"
-    detail="수동 점검 필요 항목입니다. API server 서비스 API가 외부에서 접근"
-    cur_state="수동점검 필요"
+    cmd="grep -E \"bind-address\" kube-scheduler.yaml kube-controller-manager.yaml"
+    local scheduler_manifest="${K8S_MANIFEST_DIR:-/etc/kubernetes/manifests}/kube-scheduler.yaml"
+    local controller_manifest="${K8S_MANIFEST_DIR:-/etc/kubernetes/manifests}/kube-controller-manager.yaml"
+    local output
+    output=$(k8s_collect_files "$scheduler_manifest" "$controller_manifest")
+    cur_state="${output:-Kubernetes 설정 파일 없음}"
+    if [ ! -f "$scheduler_manifest" ] || [ ! -f "$controller_manifest" ]; then
+        status="N/A"
+        detail="Kubernetes 설정 파일을 찾지 못했습니다."
+    else
+        if k8s_has "--bind-address(=|[[:space:]]+)(0\.0\.0\.0|::|\"\"|'')" "$scheduler_manifest" "$controller_manifest"; then
+            status="취약"
+            detail="scheduler/controller-manager API가 전체 인터페이스에 바인드되어 있습니다."
+        elif k8s_has "--bind-address(=|[[:space:]]+)(127\.0\.0\.1|localhost|::1)" "$scheduler_manifest" && k8s_has "--bind-address(=|[[:space:]]+)(127\.0\.0\.1|localhost|::1)" "$controller_manifest"; then
+            status="양호"
+            detail="scheduler/controller-manager API bind-address가 로컬 주소로 제한되어 있습니다."
+        else
+            status="취약"
+            detail="scheduler/controller-manager bind-address 제한 설정을 확인하지 못했습니다."
+        fi
+    fi
 
     add_result "CSAP-K8sMaster-03" "" "API sever 서비스 API 외부 오픈 금지" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -237,11 +297,28 @@ check_CSAP_K8sMaster_04() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ API server 권한 제어 설정 1\) authorization-mode 인자 값을 AlwaysAllow가 아닌 값으로 수정 - --authorization-mode=Node, RBAC \(예시\)"
+    local remediation="￭ API server 권한 제어 설정 1) authorization-mode 인자 값을 AlwaysAllow가 아닌 값으로 수정 - --authorization-mode=Node, RBAC (예시)"
 
-    status="수동점검"
-    detail="수동 점검 필요 항목입니다. API server 권한이 AlwaysAllow 값으로"
-    cur_state="수동점검 필요"
+    cmd="grep -E \"authorization-mode\" kube-apiserver.yaml"
+    local api_manifest="${K8S_MANIFEST_DIR:-/etc/kubernetes/manifests}/kube-apiserver.yaml"
+    local output
+    output=$(k8s_collect_files "$api_manifest")
+    cur_state="${output:-Kubernetes 설정 파일 없음}"
+    if [ ! -f "$api_manifest" ]; then
+        status="N/A"
+        detail="Kubernetes 설정 파일을 찾지 못했습니다."
+    else
+        if k8s_has "--authorization-mode(=|[[:space:]]+)[^[:space:]]*AlwaysAllow" "$api_manifest"; then
+            status="취약"
+            detail="API server authorization-mode에 AlwaysAllow가 포함되어 있습니다."
+        elif k8s_has "--authorization-mode" "$api_manifest"; then
+            status="양호"
+            detail="API server authorization-mode가 AlwaysAllow 이외 값으로 설정되어 있습니다."
+        else
+            status="취약"
+            detail="API server authorization-mode 설정을 확인하지 못했습니다."
+        fi
+    fi
 
     add_result "CSAP-K8sMaster-04" "API Server" "API server 권한 제어" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -252,11 +329,28 @@ check_CSAP_K8sMaster_05() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ Admission Control 설정 검토 1\) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래와 같이 설정 --enable-admission-plugins=AlwaysAdmin \(제거\) --enable-admission-plugins=AlwaysPullImages \(추가\) --enable-admission-plugins=NodeRestriction \(추가\) --enable-admission-plugins=SecurityContextDeny \(추가\) --enable-admission-plugins=PodSecurityPolicy --disable-admission-plugins=NamespaceLifecycle \(제거\) --enable-admission-plugins=EventRateLimit \(추가\) --admission-control-config-file = <path> \(추가\)"
+    local remediation="￭ Admission Control 설정 검토 1) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래와 같이 설정 --enable-admission-plugins=AlwaysAdmin (제거) --enable-admission-plugins=AlwaysPullImages (추가) --enable-admission-plugins=NodeRestriction (추가) --enable-admission-plugins=SecurityContextDeny (추가) --enable-admission-plugins=PodSecurityPolicy --disable-admission-plugins=NamespaceLifecycle (제거) --enable-admission-plugins=EventRateLimit (추가) --admission-control-config-file = <path> (추가)"
 
-    status="수동점검"
-    detail="수동 점검 필요 항목입니다. Admission Control Plugin 설정이"
-    cur_state="수동점검 필요"
+    cmd="grep -E \"admission-control-config-file|enable-admission-plugins|disable-admission-plugins\" kube-apiserver.yaml"
+    local api_manifest="${K8S_MANIFEST_DIR:-/etc/kubernetes/manifests}/kube-apiserver.yaml"
+    local output
+    output=$(k8s_collect_files "$api_manifest")
+    cur_state="${output:-Kubernetes 설정 파일 없음}"
+    if [ ! -f "$api_manifest" ]; then
+        status="N/A"
+        detail="Kubernetes 설정 파일을 찾지 못했습니다."
+    else
+        if k8s_has "--disable-admission-plugins=.*(NodeRestriction|PodSecurity|PodSecurityPolicy|SecurityContextDeny)" "$api_manifest"; then
+            status="취약"
+            detail="필수 Admission Control Plugin이 비활성화되어 있습니다."
+        elif k8s_has "--enable-admission-plugins=.*(NodeRestriction|PodSecurity|PodSecurityPolicy|SecurityContextDeny)" "$api_manifest" || k8s_has "--admission-control-config-file" "$api_manifest"; then
+            status="양호"
+            detail="Admission Control Plugin 또는 설정 파일 적용을 확인했습니다."
+        else
+            status="취약"
+            detail="Admission Control Plugin 적용 설정을 확인하지 못했습니다."
+        fi
+    fi
 
     add_result "CSAP-K8sMaster-05" "API Server" "Admission Control Plugin 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -267,22 +361,27 @@ check_CSAP_K8sMaster_06() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ SSL/TLS 적용을 통한 네트워크 구간 데이터 보호 1\) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래의 파라미터를 제거 또는 0이 아닌 값으로 설정 - --secure-port ￭ 인증서 관리 \(API Server to kubelet\) 1\) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래의 파라미터에 파일 추가 - --kubelet-certificate-authority=<인증서 파일> - --kubelet-client-certificate=<client 인증서 파일> - --kubelet-client-key=<client 키 파일> - --kubelet-account-key-file=<servive account 키 파일> ￭ 인증서 관리 \(API Server\) 1\) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래의 파라미터에 파일 추가 - --tls-cert-file=<tls 인증서 파일> - --tls-private-key-file=<tls 키 파일> - --client-ca-file=<client ca 인증서 파일> ￭ 안전한 SSL/TLS 버전 사용 \(예시\) 1\) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래의 파라미터에 추가 - --tls-cipher-suites=TLS_ECDSA_WITH_AED_128_GCM_SHA256,TLS_ECDHE_ RSA_WITH_AES_128_GCM_SHA256"
+    local remediation="￭ SSL/TLS 적용을 통한 네트워크 구간 데이터 보호 1) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래의 파라미터를 제거 또는 0이 아닌 값으로 설정 - --secure-port ￭ 인증서 관리 (API Server to kubelet) 1) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래의 파라미터에 파일 추가 - --kubelet-certificate-authority=<인증서 파일> - --kubelet-client-certificate=<client 인증서 파일> - --kubelet-client-key=<client 키 파일> - --kubelet-account-key-file=<servive account 키 파일> ￭ 인증서 관리 (API Server) 1) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래의 파라미터에 파일 추가 - --tls-cert-file=<tls 인증서 파일> - --tls-private-key-file=<tls 키 파일> - --client-ca-file=<client ca 인증서 파일> ￭ 안전한 SSL/TLS 버전 사용 (예시) 1) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래의 파라미터에 추가 - --tls-cipher-suites=TLS_ECDSA_WITH_AED_128_GCM_SHA256,TLS_ECDHE_ RSA_WITH_AES_128_GCM_SHA256"
 
-    local config_file="/etc/kubernetes/manifests/kube-apiserver.yaml"
-    # Expand wildcards/find actual config
-    local actual_config
-    actual_config=$(ls $config_file 2>/dev/null | head -1)
-    if [ -z "$actual_config" ]; then
-        detail="설정 파일 없음($config_file). "
-        cur_state="설정 파일 없음"
+    cmd="grep -E \"secure-port|certificate-authority|client-certificate|client-key|tls-cert-file|tls-private-key-file|client-ca-file|tls-cipher-suites\" kube-apiserver.yaml"
+    local api_manifest="${K8S_MANIFEST_DIR:-/etc/kubernetes/manifests}/kube-apiserver.yaml"
+    local output
+    output=$(k8s_collect_files "$api_manifest")
+    cur_state="${output:-Kubernetes 설정 파일 없음}"
+    if [ ! -f "$api_manifest" ]; then
         status="N/A"
+        detail="Kubernetes 설정 파일을 찾지 못했습니다."
     else
-        local content
-        content=$(head -20 "$actual_config" 2>/dev/null)
-        cur_state="설정 파일 존재: $actual_config"
-        detail="설정 파일 확인 필요: $actual_config. "
-        status="수동점검"
+        if k8s_has "--secure-port(=|[[:space:]]+)0" "$api_manifest"; then
+            status="취약"
+            detail="API server secure-port가 0으로 비활성화되어 있습니다."
+        elif k8s_has "--secure-port" "$api_manifest" "$api_manifest" && k8s_has "--kubelet-certificate-authority" "$api_manifest" && k8s_has "--kubelet-client-certificate" "$api_manifest" && k8s_has "--kubelet-client-key" "$api_manifest" && k8s_has "--tls-cert-file" "$api_manifest" && k8s_has "--tls-private-key-file" "$api_manifest" && k8s_has "--client-ca-file" "$api_manifest" && k8s_has "--tls-cipher-suites" "$api_manifest"; then
+            status="양호"
+            detail="API server TLS 인증서 및 cipher suite 설정을 확인했습니다."
+        else
+            status="취약"
+            detail="API server TLS 필수 설정을 모두 확인하지 못했습니다."
+        fi
     fi
 
     add_result "CSAP-K8sMaster-06" "API Server" "API server SSL/TLS 적용" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
@@ -294,11 +393,25 @@ check_CSAP_K8sMaster_07() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 로그 설정 1\) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래의 파라미터에 설정 - --auditlog-path - --audit-policy-file - --audit-log-maxage - --audit-log-maxbackup - --audit-log-maxsize"
+    local remediation="￭ 로그 설정 1) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래의 파라미터에 설정 - --auditlog-path - --audit-policy-file - --audit-log-maxage - --audit-log-maxbackup - --audit-log-maxsize"
 
-    status="수동점검"
-    detail="수동 점검 필요 항목입니다. API server 로그가 활성화된 경우"
-    cur_state="수동점검 필요"
+    cmd="grep -E \"audit-log|audit-policy\" kube-apiserver.yaml"
+    local api_manifest="${K8S_MANIFEST_DIR:-/etc/kubernetes/manifests}/kube-apiserver.yaml"
+    local output
+    output=$(k8s_collect_files "$api_manifest")
+    cur_state="${output:-Kubernetes 설정 파일 없음}"
+    if [ ! -f "$api_manifest" ]; then
+        status="N/A"
+        detail="Kubernetes 설정 파일을 찾지 못했습니다."
+    else
+        if k8s_has "--audit-log-path" "$api_manifest" && k8s_has "--audit-policy-file" "$api_manifest" && k8s_has "--audit-log-maxage" "$api_manifest" && k8s_has "--audit-log-maxbackup" "$api_manifest" && k8s_has "--audit-log-maxsize" "$api_manifest"; then
+            status="양호"
+            detail="API server 감사 로그 경로, 정책, 보관 설정을 확인했습니다."
+        else
+            status="취약"
+            detail="API server 감사 로그 필수 설정을 모두 확인하지 못했습니다."
+        fi
+    fi
 
     add_result "CSAP-K8sMaster-07" "" "API Server 로그 관리" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -309,11 +422,25 @@ check_CSAP_K8sMaster_08() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 컨트롤러에 대해 개별 서비스 계정 자격증명 1\) /etc/kubernetes/manifests/kube-controller-manager.yaml 파일 내 아래의 파라미터에 설정 - --use-service-account-credentials=true ￭ 컨트롤러 계정 자격증명에 사용되는 인증서 관리 1\) /etc/kubernetes/manifests/kube-controller-manager.yaml 파일 내 아래의 파라미터에 파일 추가 - --service-account-private-key-file= < >"
+    local remediation="￭ 컨트롤러에 대해 개별 서비스 계정 자격증명 1) /etc/kubernetes/manifests/kube-controller-manager.yaml 파일 내 아래의 파라미터에 설정 - --use-service-account-credentials=true ￭ 컨트롤러 계정 자격증명에 사용되는 인증서 관리 1) /etc/kubernetes/manifests/kube-controller-manager.yaml 파일 내 아래의 파라미터에 파일 추가 - --service-account-private-key-file= < >"
 
-    status="수동점검"
-    detail="수동 점검 필요 항목입니다. Controller 인증 제어 설정이 적용된 경우"
-    cur_state="수동점검 필요"
+    cmd="grep -E \"use-service-account-credentials|service-account-private-key-file\" kube-controller-manager.yaml"
+    local controller_manifest="${K8S_MANIFEST_DIR:-/etc/kubernetes/manifests}/kube-controller-manager.yaml"
+    local output
+    output=$(k8s_collect_files "$controller_manifest")
+    cur_state="${output:-Kubernetes 설정 파일 없음}"
+    if [ ! -f "$controller_manifest" ]; then
+        status="N/A"
+        detail="Kubernetes 설정 파일을 찾지 못했습니다."
+    else
+        if k8s_has "--use-service-account-credentials(=|[[:space:]]+)true" "$controller_manifest" && k8s_has "--service-account-private-key-file" "$controller_manifest"; then
+            status="양호"
+            detail="Controller Manager 서비스 계정 자격증명 설정을 확인했습니다."
+        else
+            status="취약"
+            detail="Controller Manager 서비스 계정 자격증명 설정을 확인하지 못했습니다."
+        fi
+    fi
 
     add_result "CSAP-K8sMaster-08" "Controller Manager" "Controller 인증 제어" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -324,22 +451,24 @@ check_CSAP_K8sMaster_09() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ SSL/TLS 적용을 통한 클라이언트 인증 1\) /etc/kubernetes/manifests/kube-controller-manager.yaml 파일 내 아래의 파라미터에 파일 추가 - --root-ca-file=<> ￭ 인증서 관리 1\) /etc/kubernetes/manifests/kube-controller-manager.yaml 파일 내 아래의 파라미터 문구 추가 - --feature-gates=RotateKubeletServerCertificate=true"
+    local remediation="￭ SSL/TLS 적용을 통한 클라이언트 인증 1) /etc/kubernetes/manifests/kube-controller-manager.yaml 파일 내 아래의 파라미터에 파일 추가 - --root-ca-file=<> ￭ 인증서 관리 1) /etc/kubernetes/manifests/kube-controller-manager.yaml 파일 내 아래의 파라미터 문구 추가 - --feature-gates=RotateKubeletServerCertificate=true"
 
-    local config_file="/etc/kubernetes/manifests/kube-controller-manager.yaml"
-    # Expand wildcards/find actual config
-    local actual_config
-    actual_config=$(ls $config_file 2>/dev/null | head -1)
-    if [ -z "$actual_config" ]; then
-        detail="설정 파일 없음($config_file). "
-        cur_state="설정 파일 없음"
+    cmd="grep -E \"root-ca-file|feature-gates|RotateKubeletServerCertificate\" kube-controller-manager.yaml"
+    local controller_manifest="${K8S_MANIFEST_DIR:-/etc/kubernetes/manifests}/kube-controller-manager.yaml"
+    local output
+    output=$(k8s_collect_files "$controller_manifest")
+    cur_state="${output:-Kubernetes 설정 파일 없음}"
+    if [ ! -f "$controller_manifest" ]; then
         status="N/A"
+        detail="Kubernetes 설정 파일을 찾지 못했습니다."
     else
-        local content
-        content=$(head -20 "$actual_config" 2>/dev/null)
-        cur_state="설정 파일 존재: $actual_config"
-        detail="설정 파일 확인 필요: $actual_config. "
-        status="수동점검"
+        if k8s_has "--root-ca-file" "$controller_manifest" && k8s_has "RotateKubeletServerCertificate=true" "$controller_manifest"; then
+            status="양호"
+            detail="Controller Manager root CA 및 인증서 회전 설정을 확인했습니다."
+        else
+            status="취약"
+            detail="Controller Manager SSL/TLS 필수 설정을 확인하지 못했습니다."
+        fi
     fi
 
     add_result "CSAP-K8sMaster-09" "Controller Manager" "Controller Manager SSL/TLS 적용" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
@@ -351,22 +480,40 @@ check_CSAP_K8sMaster_10() {
     local detail=""
     local cmd="ps -ef | grep kube-apiserver"
     local cur_state=""
-    local remediation="￭ etcd 암호화 적용 1\) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래의 파라미터에 파일 추가 - --encryption-provider-config=<> ￭ 안전한 암호화 방식 사용 1\) 아래 명령어 실행 후, --encryption-provider-config 값 확인 # ps –ef | grep kube-apiserver"
+    local remediation="￭ etcd 암호화 적용 1) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래의 파라미터에 파일 추가 - --encryption-provider-config=<> ￭ 안전한 암호화 방식 사용 1) 아래 명령어 실행 후, --encryption-provider-config 값 확인 # ps –ef | grep kube-apiserver"
 
-    local config_file="/etc/kubernetes/manifests/kube-apiserver.yaml"
-    # Expand wildcards/find actual config
-    local actual_config
-    actual_config=$(ls $config_file 2>/dev/null | head -1)
-    if [ -z "$actual_config" ]; then
-        detail="설정 파일 없음($config_file). "
-        cur_state="설정 파일 없음"
+    cmd="grep -E \"encryption-provider-config\" kube-apiserver.yaml"
+    local api_manifest="${K8S_MANIFEST_DIR:-/etc/kubernetes/manifests}/kube-apiserver.yaml"
+    local output
+    output=$(k8s_collect_files "$api_manifest")
+    cur_state="${output:-Kubernetes 설정 파일 없음}"
+    if [ ! -f "$api_manifest" ]; then
         status="N/A"
+        detail="Kubernetes 설정 파일을 찾지 못했습니다."
     else
-        local content
-        content=$(head -20 "$actual_config" 2>/dev/null)
-        cur_state="설정 파일 존재: $actual_config"
-        detail="설정 파일 확인 필요: $actual_config. "
-        status="수동점검"
+        local enc_config
+        enc_config=$(k8s_collect_files "$api_manifest" | sed -n 's/.*--encryption-provider-config[= ]\([^[:space:]]*\).*/\1/p' | head -1)
+        if [ -z "$enc_config" ]; then
+            status="취약"
+            detail="API server encryption-provider-config 설정을 확인하지 못했습니다."
+        elif [ -f "$enc_config" ]; then
+            local enc_output
+            enc_output=$(k8s_collect_files "$enc_config")
+            cur_state="${cur_state} ${enc_output}"
+            if printf '%s\n' "$enc_output" | grep -Eiq "identity:"; then
+                status="취약"
+                detail="etcd 암호화 provider에 identity가 포함되어 있습니다."
+            elif printf '%s\n' "$enc_output" | grep -Eiq "aescbc:|kms:|secretbox:"; then
+                status="양호"
+                detail="안전한 etcd 암호화 provider 설정을 확인했습니다."
+            else
+                status="취약"
+                detail="안전한 etcd 암호화 provider를 확인하지 못했습니다."
+            fi
+        else
+            status="수동점검"
+            detail="encryption-provider-config 경로는 확인했지만 파일을 읽지 못했습니다: $enc_config"
+        fi
     fi
 
     add_result "CSAP-K8sMaster-10" "etcd Configuration" "etcd 암호화 적용" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
@@ -378,22 +525,28 @@ check_CSAP_K8sMaster_11() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ SSL/TLS 적용을 통한 클라이언트 인증\(etcd peer 및 클라이언트\) 1\) /etc/kubernetes/manifests/etcd.yaml 파일 내 아래와 같이 설정 --client-cert-auth=true 추가 --peer-client-cert-auth=true 수정 \(etcd server의 경우 적용 필요 없음\) ￭ 인증서 관리\(etcd peer 및 클라이언트\) \(인증서설정 예시\) 1\) /etc/kubernetes/manifests/etcd.yaml 파일 내 아래와 같이 설정 --cert-file=<인증서 파일> 추가 --key-file=<키 파일> 추가 --peer-cert-file=<peer 인증서 파일> --peer-key-file=<peer 키 파일> 추가 2\) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래와 같이 설정 --etcd-certfile=<etcd cert 인증서 파일> 추가 --etcd-keyfile=<etcd 키 파일> 추가 --etcd-cafile=<etcd ca 인증서 파일> 추가 ￭ 인증서 관리\(자체 서명인증서 사용금지\) 1\) /etc/kubernetes/manifests/etcd.yaml 파일 내 아래와 같이 설정 --auto-tls=false --peer-auto-tls=false or 제거 \(etcd server의 경우 적용 필요 없음\) --trusted-ca-file=<인증서 파일> 추가"
+    local remediation="￭ SSL/TLS 적용을 통한 클라이언트 인증(etcd peer 및 클라이언트) 1) /etc/kubernetes/manifests/etcd.yaml 파일 내 아래와 같이 설정 --client-cert-auth=true 추가 --peer-client-cert-auth=true 수정 (etcd server의 경우 적용 필요 없음) ￭ 인증서 관리(etcd peer 및 클라이언트) (인증서설정 예시) 1) /etc/kubernetes/manifests/etcd.yaml 파일 내 아래와 같이 설정 --cert-file=<인증서 파일> 추가 --key-file=<키 파일> 추가 --peer-cert-file=<peer 인증서 파일> --peer-key-file=<peer 키 파일> 추가 2) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래와 같이 설정 --etcd-certfile=<etcd cert 인증서 파일> 추가 --etcd-keyfile=<etcd 키 파일> 추가 --etcd-cafile=<etcd ca 인증서 파일> 추가 ￭ 인증서 관리(자체 서명인증서 사용금지) 1) /etc/kubernetes/manifests/etcd.yaml 파일 내 아래와 같이 설정 --auto-tls=false --peer-auto-tls=false or 제거 (etcd server의 경우 적용 필요 없음) --trusted-ca-file=<인증서 파일> 추가"
 
-    local config_file="/etc/kubernetes/manifests/etcd.yaml"
-    # Expand wildcards/find actual config
-    local actual_config
-    actual_config=$(ls $config_file 2>/dev/null | head -1)
-    if [ -z "$actual_config" ]; then
-        detail="설정 파일 없음($config_file). "
-        cur_state="설정 파일 없음"
+    cmd="grep -E \"client-cert-auth|cert-file|key-file|trusted-ca-file|auto-tls|etcd-certfile|etcd-keyfile|etcd-cafile\" etcd.yaml kube-apiserver.yaml"
+    local etcd_manifest="${K8S_MANIFEST_DIR:-/etc/kubernetes/manifests}/etcd.yaml"
+    local api_manifest="${K8S_MANIFEST_DIR:-/etc/kubernetes/manifests}/kube-apiserver.yaml"
+    local output
+    output=$(k8s_collect_files "$etcd_manifest" "$api_manifest")
+    cur_state="${output:-Kubernetes 설정 파일 없음}"
+    if [ ! -f "$etcd_manifest" ] || [ ! -f "$api_manifest" ]; then
         status="N/A"
+        detail="Kubernetes 설정 파일을 찾지 못했습니다."
     else
-        local content
-        content=$(head -20 "$actual_config" 2>/dev/null)
-        cur_state="설정 파일 존재: $actual_config"
-        detail="설정 파일 확인 필요: $actual_config. "
-        status="수동점검"
+        if k8s_has "--auto-tls(=|[[:space:]]+)true|--peer-auto-tls(=|[[:space:]]+)true" "$etcd_manifest"; then
+            status="취약"
+            detail="etcd auto-tls 또는 peer-auto-tls가 활성화되어 있습니다."
+        elif k8s_has "--client-cert-auth(=|[[:space:]]+)true" "$etcd_manifest" && k8s_has "--peer-client-cert-auth(=|[[:space:]]+)true" "$etcd_manifest" && k8s_has "--cert-file" "$etcd_manifest" && k8s_has "--key-file" "$etcd_manifest" && k8s_has "--peer-cert-file" "$etcd_manifest" && k8s_has "--peer-key-file" "$etcd_manifest" && k8s_has "--trusted-ca-file" "$etcd_manifest" && k8s_has "--etcd-certfile" "$api_manifest" && k8s_has "--etcd-keyfile" "$api_manifest" && k8s_has "--etcd-cafile" "$api_manifest"; then
+            status="양호"
+            detail="etcd peer/client TLS 인증 설정을 확인했습니다."
+        else
+            status="취약"
+            detail="etcd TLS 필수 설정을 모두 확인하지 못했습니다."
+        fi
     fi
 
     add_result "CSAP-K8sMaster-11" "etcd Configuration" "etcd SSL/TLS 적용" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
@@ -405,7 +558,7 @@ check_CSAP_K8sMaster_12() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 컨테이너 권한 제어 1\) pod 생성 *.yaml 파일 내에 SecurityContext 설정값 수정 \(예시\) -allowPrivilegeEscalation: false \(추가\) -runAsUser: 0이 아닌 값 \(추가\) -runAsNonRoot: true \(추가\) -capabilities.drop: \(추가\) drop: [\"ALL\"] -seccomprofiles: \(추가\) type: \"ReuntimeDefault\" 2\) namespace 생성 시, namespace에 PodSecurityAdmission 정책을 아래와 같이 적용\(enforce, warn 인수는 privileged가 아닌 restricted로 설정\) # kubectl label —overwrite ns test-restricted pod-security.kubernetes.io/enforce= restricted pod-security.kubernetes.io/warn=restricted"
+    local remediation="￭ 컨테이너 권한 제어 1) pod 생성 *.yaml 파일 내에 SecurityContext 설정값 수정 (예시) -allowPrivilegeEscalation: false (추가) -runAsUser: 0이 아닌 값 (추가) -runAsNonRoot: true (추가) -capabilities.drop: (추가) drop: [\"ALL\"] -seccomprofiles: (추가) type: \"ReuntimeDefault\" 2) namespace 생성 시, namespace에 PodSecurityAdmission 정책을 아래와 같이 적용(enforce, warn 인수는 privileged가 아닌 restricted로 설정) # kubectl label —overwrite ns test-restricted pod-security.kubernetes.io/enforce= restricted pod-security.kubernetes.io/warn=restricted"
 
     status="수동점검"
     detail="수동 점검 필요 항목입니다. PodSecurityAdmission 정책을 통해"
@@ -420,7 +573,7 @@ check_CSAP_K8sMaster_13() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 네임스페이스 공유 금지 1\) pod 생성 *.yaml 파일 내 spec 필드에서 아래의 설정값 유무 확인 - hostNetwork: false 또는 파라미터 제거 - hostPID: false 또는 파라미터 제거 - hostIPC: false 또는 파라미터 제거"
+    local remediation="￭ 네임스페이스 공유 금지 1) pod 생성 *.yaml 파일 내 spec 필드에서 아래의 설정값 유무 확인 - hostNetwork: false 또는 파라미터 제거 - hostPID: false 또는 파라미터 제거 - hostIPC: false 또는 파라미터 제거"
 
     status="수동점검"
     detail="수동 점검 필요 항목입니다. 네임스페이스 공유 금지 설정이 적용된 경우"
@@ -604,7 +757,7 @@ check_CSAP_K8sMaster_15() {
     local detail=""
     local cmd="ls -al /etc/kubernetes/pki/*.crt; ls -al /etc/kubernetes/pki/*.key; ls -al /var/;ib/kubernetes/ pem"
     local cur_state=""
-    local remediation="￭ pki 인증서 파일 접근 권한 확인 # chmod 644 /etc/kubernetes/pki/*.crt ￭ pki 키 파일 접근 권한 확인 # chmod 600 /etc/kubernetes/pki/*.key ￭ Hardway로 설치된 경우\(예시\) # chmod 600 /var/lib/kubernetes/*.pem"
+    local remediation="￭ pki 인증서 파일 접근 권한 확인 # chmod 644 /etc/kubernetes/pki/*.crt ￭ pki 키 파일 접근 권한 확인 # chmod 600 /etc/kubernetes/pki/*.key ￭ Hardway로 설치된 경우(예시) # chmod 600 /var/lib/kubernetes/*.pem"
 
     local vuln_found=false
     local checked_any=false
@@ -942,7 +1095,7 @@ check_CSAP_K8sMaster_17() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 최신 보안 업데이트 적용 여부 확인 1\) # kubectl version 2\) 기간 산정해서 보안 패치 적용\(정기 PM 등\) ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
+    local remediation="￭ 최신 보안 업데이트 적용 여부 확인 1) # kubectl version 2) 기간 산정해서 보안 패치 적용(정기 PM 등) ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
 
     status="수동점검"
     detail="수동 점검 필요 항목입니다. 최신 보안 패치가 적용되거나 보안"

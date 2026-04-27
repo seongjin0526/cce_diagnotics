@@ -260,7 +260,7 @@ check_CSAP_NodeJS_01() {
     local detail=""
     local cmd="ps -ef | grep node | grep -v grep"
     local cur_state=""
-    local remediation="￭ root 계정 이외의 계정으로 node 프로세스 실행 1\) # set DEBU=www & npm start dev ￭ production 모드로 변경 1\) # export NODE_ENV=production"
+    local remediation="￭ root 계정 이외의 계정으로 node 프로세스 실행 1) # set DEBU=www & npm start dev ￭ production 모드로 변경 1) # export NODE_ENV=production"
 
     local output
     output=$({
@@ -321,7 +321,7 @@ check_CSAP_NodeJS_02() {
     local detail=""
     local cmd="cat app.js"
     local cur_state=""
-    local remediation="￭ node 메인 파일에 헤더 정보 노출 설정 추가 예시\) 1\) # vi app.js"
+    local remediation="￭ node 메인 파일에 헤더 정보 노출 설정 추가 예시) 1) # vi app.js"
 
     local config_file="${NODE_MAIN:-app.js}"
     # Expand wildcards/find actual config
@@ -333,7 +333,7 @@ check_CSAP_NodeJS_02() {
         status="N/A"
     else
         local grep_result
-        grep_result=$(grep -Ei "app\\.disable\\\([[:space:]]*[\\\"\\']x-powered-by[\\\"\\']|helmet\\\(|x-powered-by" "$actual_config" 2>/dev/null)
+        grep_result=$(grep -Ei "app\\.disable\\([[:space:]]*[\\\"\\']x-powered-by[\\\"\\']|helmet\\(|x-powered-by" "$actual_config" 2>/dev/null)
         output="$grep_result"
         cur_state="$grep_result"
     if [ -z "$output" ]; then
@@ -390,7 +390,7 @@ check_CSAP_NodeJS_03() {
     local detail=""
     local cmd="cat app.js; cat views/error.jade"
     local cur_state=""
-    local remediation="￭ 일원화된 오류 메시지 설정 예시\) 1\) # vi views/error/jade ￭ 에러 내용을 알 수 없는 일원화된 오류 메시지"
+    local remediation="￭ 일원화된 오류 메시지 설정 예시) 1) # vi views/error/jade ￭ 에러 내용을 알 수 없는 일원화된 오류 메시지"
 
     local output
     output=$({
@@ -452,7 +452,7 @@ check_CSAP_NodeJS_04() {
     local detail=""
     local cmd="ls -ld; ls -ld"
     local cur_state=""
-    local remediation="￭ 로그 디렉터리 및 로그 파일 접근 권한 변경 1\) 로그 디렉터리 접근 권한 변경 # chown nodeLnode [node 애플리케이션 로그 디렉터리] # chown 750 [node 애플리케이션 로그 디렉터리] ￭ 로그 파일 접근 권한 변경 # chown node:node [node 애플리케이션 로그 파일] # chmod 640 [node 애플리케이션 로그 디렉터리]"
+    local remediation="￭ 로그 디렉터리 및 로그 파일 접근 권한 변경 1) 로그 디렉터리 접근 권한 변경 # chown nodeLnode [node 애플리케이션 로그 디렉터리] # chown 750 [node 애플리케이션 로그 디렉터리] ￭ 로그 파일 접근 권한 변경 # chown node:node [node 애플리케이션 로그 파일] # chmod 640 [node 애플리케이션 로그 디렉터리]"
 
     local vuln_found=false
     local checked_any=false
@@ -525,7 +525,7 @@ check_CSAP_NodeJS_05() {
     local detail=""
     local cmd="cat app.js"
     local cur_state=""
-    local remediation="￭ 실시간 콘솔 로그 설정 예시\) Express의 Morgan 모듈을 사용하는 경우 1\) # vi app.js var logger = require\('morgan'\); ... 중간 생략 ... app.use\(logger\('combined'\)\) ￭ 로그 파일 저장 설정 예시\) Express의 Morgan 모듈을 사용하는 경우 1\) # vi app.js var fs = require\('fs'\); ... 중간 생략 ... app.use\(logger\({ format: 'default', stream: fs.createWriteStream\('./log/app.log', {'flags': 'w'}\) }\)\);"
+    local remediation="￭ 실시간 콘솔 로그 설정 예시) Express의 Morgan 모듈을 사용하는 경우 1) # vi app.js var logger = require('morgan'); ... 중간 생략 ... app.use(logger('combined')) ￭ 로그 파일 저장 설정 예시) Express의 Morgan 모듈을 사용하는 경우 1) # vi app.js var fs = require('fs'); ... 중간 생략 ... app.use(logger({ format: 'default', stream: fs.createWriteStream('./log/app.log', {'flags': 'w'}) }));"
 
     local output
     output=$({
@@ -535,7 +535,7 @@ check_CSAP_NodeJS_05() {
 
     if [ -z "$output" ]; then
         status="양호"
-        detail="로그 포맷 설정값이 default\(또는"
+        detail="로그 포맷 설정값이 default(또는"
     else
         if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
             local default_text
@@ -565,13 +565,13 @@ check_CSAP_NodeJS_05() {
         else
         if output_has_negative_marker "$output"; then
             status="양호"
-            detail="로그 포맷 설정값이 default\(또는"
+            detail="로그 포맷 설정값이 default(또는"
         elif output_has_positive_marker "$output"; then
             status="취약"
-            detail="로그 포맷 설정값이 default\(또는"
+            detail="로그 포맷 설정값이 default(또는"
         else
             status="취약"
-            detail="로그 포맷 설정값이 default\(또는"
+            detail="로그 포맷 설정값이 default(또는"
         fi
         fi
     fi
@@ -584,9 +584,9 @@ check_CSAP_NodeJS_05() {
 check_CSAP_NodeJS_06() {
     local status="양호"
     local detail=""
-    local cmd="base=\${NODE_APP_ROOT:-/workspace/docker/test-lab/fixtures/node}; if [ -d \"\$base\" ]; then out=\$\(find \"\$base\" -maxdepth 2 \\\( -name logs -o -name '*.log' \\\) 2>/dev/null | head -20\); if [ -n \"\$out\" ]; then printf '%s\\n' \"\$out\"; else echo \"DEFAULT_BAD|로그 파일 또는 로그 디렉터리를 찾지 못했습니다.\"; fi; else echo \"FILE_MISSING|점검 대상 경로를 찾지 못했습니다.\"; fi"
+    local cmd="base=\${NODE_APP_ROOT:-/workspace/docker/test-lab/fixtures/node}; if [ -d \"\$base\" ]; then out=\$(find \"\$base\" -maxdepth 2 \\( -name logs -o -name '*.log' \\) 2>/dev/null | head -20); if [ -n \"\$out\" ]; then printf '%s\\n' \"\$out\"; else echo \"DEFAULT_BAD|로그 파일 또는 로그 디렉터리를 찾지 못했습니다.\"; fi; else echo \"FILE_MISSING|점검 대상 경로를 찾지 못했습니다.\"; fi"
     local cur_state=""
-    local remediation="￭ 사용자 접속 기록 보관 기간은 '정보통신망 이용 촉진 및 정보보호 등에 관한 법률', '개인정보보호법'등 관련 법률에 근거하여 보관하여야 함 1\) 개인정보 처리 시스템인 경우 접속 기록 보관 주기 : 1년 이상\(5만 명 이상의 정보 주체에 관하여 개인정보를 처리하거나, 민감 정보를 처리하는 경우에는 2년 이상\) 접속 기록에 대한 주기적 점검 : 월 1회 이상 백업 수행 주기 : 개인정보 처리 시스템 외의 별도 저장 장치에 상시로 접속 기록 백업 백업 보관 주기 : 관련 사항 없음\(재해복구 관점 고려\) 2\) 로그 백업 정책에 따라 로그 파일을 정기적으로 백업을 수행"
+    local remediation="￭ 사용자 접속 기록 보관 기간은 '정보통신망 이용 촉진 및 정보보호 등에 관한 법률', '개인정보보호법'등 관련 법률에 근거하여 보관하여야 함 1) 개인정보 처리 시스템인 경우 접속 기록 보관 주기 : 1년 이상(5만 명 이상의 정보 주체에 관하여 개인정보를 처리하거나, 민감 정보를 처리하는 경우에는 2년 이상) 접속 기록에 대한 주기적 점검 : 월 1회 이상 백업 수행 주기 : 개인정보 처리 시스템 외의 별도 저장 장치에 상시로 접속 기록 백업 백업 보관 주기 : 관련 사항 없음(재해복구 관점 고려) 2) 로그 백업 정책에 따라 로그 파일을 정기적으로 백업을 수행"
 
     local output
     output=$({
@@ -639,7 +639,7 @@ check_CSAP_NodeJS_07() {
     local detail=""
     local cmd="rpm -qa | grep nodejs; node -v; npm -v"
     local cur_state=""
-    local remediation="￭ Node.js 사이트를 통해 주기적으로 버전 점검을 하도록 하며 최신 보안 패치 적용 시 충분한 테스트 후 적용 ￭ NPM 최신 보안 패치 업데이트 1\) npm 업데이트 # npm install –g npm 2\) 업데이트 후 npm 버전 확인 ￭ Express 최신 버전 업데이트 # npm install express"
+    local remediation="￭ Node.js 사이트를 통해 주기적으로 버전 점검을 하도록 하며 최신 보안 패치 적용 시 충분한 테스트 후 적용 ￭ NPM 최신 보안 패치 업데이트 1) npm 업데이트 # npm install –g npm 2) 업데이트 후 npm 버전 확인 ￭ Express 최신 버전 업데이트 # npm install express"
 
     local output
     output=$({

@@ -84,7 +84,7 @@ add_result() {
     current_state=$(sanitize_json_value "$current_state")
     remediation=$(sanitize_json_value "$remediation")
 
-    echo "{\"code\":\"$code\",\"category\":\"$category\",\"title\":\"$title\",\"importance\":\"$importance\",\"status\":\"$status\",\"detail\":\"$detail\",\"source\":\"$source\",\"command\":\"$command\",\"current_state\":\"$current_state\",\"remediation\":\"$remediation\"}" >> "$RESULTS_FILE"
+    printf '%s\n' "{\"code\":\"$code\",\"category\":\"$category\",\"title\":\"$title\",\"importance\":\"$importance\",\"status\":\"$status\",\"detail\":\"$detail\",\"source\":\"$source\",\"command\":\"$command\",\"current_state\":\"$current_state\",\"remediation\":\"$remediation\"}" >> "$RESULTS_FILE"
     log_result_trace "$code" "$status" "$title" "$raw_command" "$raw_current_state" "$raw_detail"
 }
 
@@ -135,6 +135,20 @@ is_service_active() {
 # --- Kubernetes helper ---
 run_kubectl() {
     kubectl "$@" 2>/dev/null
+}
+
+k8s_collect_files() {
+    for file in "$@"; do
+        [ -f "$file" ] || continue
+        printf 'FILE:%s\n' "$file"
+        grep -Ev '^[[:space:]]*#' "$file" 2>/dev/null | head -240
+    done
+}
+
+k8s_has() {
+    pattern="$1"
+    shift
+    k8s_collect_files "$@" | grep -Eiq -- "$pattern"
 }
 
 
@@ -197,11 +211,26 @@ check_CSAP_K8sWorker_01() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ Kubelet service 파일을 사용하는 경우 1\) vi 명령어를 통해 —anonymous-auth 설정을 false로 —read-only-port 설정을 0으로 설정 \$ vi [kubelet service 경로] Environment=\"KUBELET_SYSTEM_PODS_ARGS=--anonymous-auth=false --read-only-prot=0\" 설정 추가 2\) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service ￭ Kubelet config 파일을 사용하는 경우 1\) vi 명령어를 통해 --anonymous-auth 설정을 false로 --read-only-port 설정을 0으로 설정 \$ vi [kubelet config 파일 경로] 2\) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service"
+    local remediation="￭ Kubelet service 파일을 사용하는 경우 1) vi 명령어를 통해 —anonymous-auth 설정을 false로 —read-only-port 설정을 0으로 설정 \$ vi [kubelet service 경로] Environment=\"KUBELET_SYSTEM_PODS_ARGS=--anonymous-auth=false --read-only-prot=0\" 설정 추가 2) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service ￭ Kubelet config 파일을 사용하는 경우 1) vi 명령어를 통해 --anonymous-auth 설정을 false로 --read-only-port 설정을 0으로 설정 \$ vi [kubelet config 파일 경로] 2) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service"
 
-    status="수동점검"
-    detail="수동 점검 필요 항목입니다. 비인증 접근이 차단된 경우"
-    cur_state="수동점검 필요"
+    cmd="grep -E \"anonymous|readOnlyPort|read-only-port\" kubelet config/service"
+    local kubelet_conf="${KUBELET_CONF:-/var/lib/kubelet/config.yaml}"
+    local kubelet_service_conf="${KUBELET_SERVICE_CONF:-/usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf}"
+    local output
+    output=$(k8s_collect_files "$kubelet_conf" "$kubelet_service_conf")
+    cur_state="${output:-Kubernetes 설정 파일 없음}"
+    if [ ! -f "$kubelet_conf" ]; then
+        status="N/A"
+        detail="Kubernetes 설정 파일을 찾지 못했습니다."
+    else
+        if (k8s_has "anonymous:[[:space:]]*$" "$kubelet_conf" && k8s_has "enabled:[[:space:]]*false" "$kubelet_conf" || k8s_has "--anonymous-auth(=|[[:space:]]+)false" "$kubelet_service_conf" "$kubelet_conf") && (k8s_has "readOnlyPort:[[:space:]]*0" "$kubelet_conf" || k8s_has "--read-only-port(=|[[:space:]]+)0" "$kubelet_service_conf" "$kubelet_conf"); then
+            status="양호"
+            detail="Kubelet anonymous-auth 비활성화 및 read-only-port 0 설정을 확인했습니다."
+        else
+            status="취약"
+            detail="Kubelet anonymous-auth=false 또는 read-only-port=0 설정을 확인하지 못했습니다."
+        fi
+    fi
 
     add_result "CSAP-K8sWorker-01" "패치 관리" "Kubelet 인증 제어" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -212,11 +241,29 @@ check_CSAP_K8sWorker_02() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ Kubelet service 파일을 사용하는 경우 1\) vi 명령어를 통해 --authorization-mode 설정에 모드 설정 \$ vi [kubelet service 파일 경로] Environment=\"KUBELET_SYSTEM_PODS_ARGS=--anonymous-auth=false --read-only-prot=0\" 설정 추가 2\) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service ￭ Kubelet config 파일을 사용하는 경우 1\) vi 명령어를 통해 --authorization-mode 설정에 모드 설정 \$ vi [kubelet config 파일 경로] 2\) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service"
+    local remediation="￭ Kubelet service 파일을 사용하는 경우 1) vi 명령어를 통해 --authorization-mode 설정에 모드 설정 \$ vi [kubelet service 파일 경로] Environment=\"KUBELET_SYSTEM_PODS_ARGS=--anonymous-auth=false --read-only-prot=0\" 설정 추가 2) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service ￭ Kubelet config 파일을 사용하는 경우 1) vi 명령어를 통해 --authorization-mode 설정에 모드 설정 \$ vi [kubelet config 파일 경로] 2) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service"
 
-    status="수동점검"
-    detail="수동 점검 필요 항목입니다. API server 권한이 AlwaysAllow 값으로"
-    cur_state="수동점검 필요"
+    cmd="grep -E \"authorization-mode|authorization:|mode:\" kubelet config/service"
+    local kubelet_conf="${KUBELET_CONF:-/var/lib/kubelet/config.yaml}"
+    local kubelet_service_conf="${KUBELET_SERVICE_CONF:-/usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf}"
+    local output
+    output=$(k8s_collect_files "$kubelet_conf" "$kubelet_service_conf")
+    cur_state="${output:-Kubernetes 설정 파일 없음}"
+    if [ ! -f "$kubelet_conf" ]; then
+        status="N/A"
+        detail="Kubernetes 설정 파일을 찾지 못했습니다."
+    else
+        if k8s_has "AlwaysAllow" "$kubelet_conf" "$kubelet_service_conf"; then
+            status="취약"
+            detail="Kubelet authorization mode가 AlwaysAllow로 설정되어 있습니다."
+        elif k8s_has "authorizationMode:[[:space:]]*(Webhook|Node)|mode:[[:space:]]*(Webhook|Node)|--authorization-mode(=|[[:space:]]+)(Webhook|Node)" "$kubelet_conf" "$kubelet_service_conf"; then
+            status="양호"
+            detail="Kubelet authorization mode가 AlwaysAllow 이외 값으로 설정되어 있습니다."
+        else
+            status="취약"
+            detail="Kubelet authorization mode 설정을 확인하지 못했습니다."
+        fi
+    fi
 
     add_result "CSAP-K8sWorker-02" "" "Kubelet 권한 제어" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -227,22 +274,28 @@ check_CSAP_K8sWorker_03() {
     local detail=""
     local cmd="cat --hostname-override"
     local cur_state=""
-    local remediation="￭ kubelet config 파일에서 클라이언트 CA 인증서 설정 1\) \$ cat [kubelet config 파일 경로] clientCAFile : [CA 인증서 파일 경로] ￭ kubelet config 파일에서 TLS 인증서와 Private key가 설정되어 있는지 확인 1\) \$ cat [kubelet config 파일 경로] tlsCertFile : [인증서 파일 경로] tlsPrivateKeyFile : [Private key 파일 경로] ￭ kubelet config 파일에서 인증서 교환주기 설정이 되어 있는지 확인 1\) \$ cat [kubelet config 파일 경로] tlsCertFile : [인증서 파일 경로] tlsPrivateKeyFile : [Private key 파일 경로] ￭ kubelet config 파일에서 TLS 통신에 사용되는 TLS 버전 및 cipher suites 확인 1\) \$ cat [kubelet config 파일 경로] TLSCipherSuites : TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305 TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305 TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 TLS_RSA_WITH_AES_256_GCM_SHA384 TLS_RSA_WITH_AES_128_GCM_SHA256 ￭ kubelet service 파일에서 hostname이 변경되지 않도록 설정되어 있는지 확인 1\) \$ cat [kubelet service 파일 경로]를 확인하여 --hostname-override 설정이 존재하는지 확인\(존재하지 않아야 함\)"
+    local remediation="￭ kubelet config 파일에서 클라이언트 CA 인증서 설정 1) \$ cat [kubelet config 파일 경로] clientCAFile : [CA 인증서 파일 경로] ￭ kubelet config 파일에서 TLS 인증서와 Private key가 설정되어 있는지 확인 1) \$ cat [kubelet config 파일 경로] tlsCertFile : [인증서 파일 경로] tlsPrivateKeyFile : [Private key 파일 경로] ￭ kubelet config 파일에서 인증서 교환주기 설정이 되어 있는지 확인 1) \$ cat [kubelet config 파일 경로] tlsCertFile : [인증서 파일 경로] tlsPrivateKeyFile : [Private key 파일 경로] ￭ kubelet config 파일에서 TLS 통신에 사용되는 TLS 버전 및 cipher suites 확인 1) \$ cat [kubelet config 파일 경로] TLSCipherSuites : TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305 TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305 TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 TLS_RSA_WITH_AES_256_GCM_SHA384 TLS_RSA_WITH_AES_128_GCM_SHA256 ￭ kubelet service 파일에서 hostname이 변경되지 않도록 설정되어 있는지 확인 1) \$ cat [kubelet service 파일 경로]를 확인하여 --hostname-override 설정이 존재하는지 확인(존재하지 않아야 함)"
 
-    local config_file="/etc/app/config"
-    # Expand wildcards/find actual config
-    local actual_config
-    actual_config=$(ls $config_file 2>/dev/null | head -1)
-    if [ -z "$actual_config" ]; then
-        detail="설정 파일 없음($config_file). "
-        cur_state="설정 파일 없음"
+    cmd="grep -E \"clientCAFile|tlsCertFile|tlsPrivateKeyFile|tlsCipherSuites|serverTLSBootstrap|rotateCertificates|hostname-override\" kubelet config/service"
+    local kubelet_conf="${KUBELET_CONF:-/var/lib/kubelet/config.yaml}"
+    local kubelet_service_conf="${KUBELET_SERVICE_CONF:-/usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf}"
+    local output
+    output=$(k8s_collect_files "$kubelet_conf" "$kubelet_service_conf")
+    cur_state="${output:-Kubernetes 설정 파일 없음}"
+    if [ ! -f "$kubelet_conf" ]; then
         status="N/A"
+        detail="Kubernetes 설정 파일을 찾지 못했습니다."
     else
-        local content
-        content=$(head -20 "$actual_config" 2>/dev/null)
-        cur_state="설정 파일 존재: $actual_config"
-        detail="설정 파일 확인 필요: $actual_config. "
-        status="수동점검"
+        if k8s_has "--hostname-override" "$kubelet_service_conf" "$kubelet_conf"; then
+            status="취약"
+            detail="Kubelet hostname-override 설정이 존재합니다."
+        elif k8s_has "clientCAFile:[[:space:]]*[^[:space:]]+" "$kubelet_conf" && (k8s_has "tlsCertFile:[[:space:]]*[^[:space:]]+" "$kubelet_conf" && k8s_has "tlsPrivateKeyFile:[[:space:]]*[^[:space:]]+" "$kubelet_conf" || k8s_has "serverTLSBootstrap:[[:space:]]*true|rotateCertificates:[[:space:]]*true" "$kubelet_conf") && k8s_has "tlsCipherSuites:" "$kubelet_conf"; then
+            status="양호"
+            detail="Kubelet TLS 인증서, CA, cipher suite 설정을 확인했습니다."
+        else
+            status="취약"
+            detail="Kubelet SSL/TLS 필수 설정을 모두 확인하지 못했습니다."
+        fi
     fi
 
     add_result "CSAP-K8sWorker-03" "" "Kubelet SSL/TLS 적용" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
@@ -254,11 +307,26 @@ check_CSAP_K8sWorker_04() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ kubelet service 파일을 사용하는 경우 1\) --protect-kernel-defaults 설정이 true로 설정 \$ vi [kubelet service 파일 경로] Environment=\"KUBELET_SYSTEM_PODS_ARGS=--protect-kernel-defaults =true\" 설정 추가 2\) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service ￭ Kubelet config 파일을 사용하는 경우 1\) vi 명령어를 통해 protectKernelDefaults 설정을 true로 설정 \$ vi [kubelet config 파일 경로] 2\) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service"
+    local remediation="￭ kubelet service 파일을 사용하는 경우 1) --protect-kernel-defaults 설정이 true로 설정 \$ vi [kubelet service 파일 경로] Environment=\"KUBELET_SYSTEM_PODS_ARGS=--protect-kernel-defaults =true\" 설정 추가 2) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service ￭ Kubelet config 파일을 사용하는 경우 1) vi 명령어를 통해 protectKernelDefaults 설정을 true로 설정 \$ vi [kubelet config 파일 경로] 2) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service"
 
-    status="수동점검"
-    detail="수동 점검 필요 항목입니다. Kubelet Default Kernel 값을 보호하는"
-    cur_state="수동점검 필요"
+    cmd="grep -E \"protectKernelDefaults|protect-kernel-defaults\" kubelet config/service"
+    local kubelet_conf="${KUBELET_CONF:-/var/lib/kubelet/config.yaml}"
+    local kubelet_service_conf="${KUBELET_SERVICE_CONF:-/usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf}"
+    local output
+    output=$(k8s_collect_files "$kubelet_conf" "$kubelet_service_conf")
+    cur_state="${output:-Kubernetes 설정 파일 없음}"
+    if [ ! -f "$kubelet_conf" ]; then
+        status="N/A"
+        detail="Kubernetes 설정 파일을 찾지 못했습니다."
+    else
+        if k8s_has "protectKernelDefaults:[[:space:]]*true|--protect-kernel-defaults(=|[[:space:]]+)true" "$kubelet_conf" "$kubelet_service_conf"; then
+            status="양호"
+            detail="Kubelet protectKernelDefaults=true 설정을 확인했습니다."
+        else
+            status="취약"
+            detail="Kubelet protectKernelDefaults=true 설정을 확인하지 못했습니다."
+        fi
+    fi
 
     add_result "CSAP-K8sWorker-04" "" "Kernel 파라미터 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }

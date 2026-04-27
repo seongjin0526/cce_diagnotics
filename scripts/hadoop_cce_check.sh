@@ -261,7 +261,7 @@ check_CSAP_Hadoop_01() {
     local detail=""
     local cmd="./bin/hadoop fs -ls"
     local cur_state=""
-    local remediation="￭ 로컬 파일 시스템 \(예시\) // dfs.namenode.name.dir = hdfs:hadoop \(700\) 1\) # chown –R hdfs:hadoop /home/hadoop/data/dfs/name 2\) # chmod 700 /home/hadoop/data/dfs/name // dfs.namenode.data.dir = hdfs:hadoop \(700\) 3\) # chown –R hdfs:hadoop /home/hadoop/data/dfs/data 4\) # chmod 700 /home/hadoop/data/dfs/data // dfs.journalnode.edits.dir = hdfs:hadoop \(700\) 5\) # chown –R hdfs:hadoop /home/hadoop/data/dfs/journalnode 6\) # chmod 700 /home/hadoop/data/dfs/journalnode // \$HADOOP_LOG_DIR = hdfs:hadoop \(775\) 7\) # chown –R hdfs:hadoop /home/hadoop/logs 8\) # chmod 775 /home/hadoop/logs // yarn.nodemanager.local-dirs = yarn:hadoop \(755\) 10\) # chown -R yarn:hadoop /home/hadoop/data/yarn/nm-local-dir 11\) # chmod 755 /home/hadoop/data/yarn/nm-local-dir ￭ HDFS 디렉토리 1\) / = hdfs:hadoop \(775\) 2\) /home/hadoop/bin/hdfs dfs –chown hdfs:hadoop / 3\) /home/hadoop/bin/hdfs dfs –chmod 755 / 4\) /user = hdfs:hadoop \(755\) 5\) /home/hadoop/bin/hdfs dfs –chown hdfs:hadoop /user 6\) /home/hadoop/bin/hdfs dfs –chmod 755 /user"
+    local remediation="￭ 로컬 파일 시스템 (예시) // dfs.namenode.name.dir = hdfs:hadoop (700) 1) # chown –R hdfs:hadoop /home/hadoop/data/dfs/name 2) # chmod 700 /home/hadoop/data/dfs/name // dfs.namenode.data.dir = hdfs:hadoop (700) 3) # chown –R hdfs:hadoop /home/hadoop/data/dfs/data 4) # chmod 700 /home/hadoop/data/dfs/data // dfs.journalnode.edits.dir = hdfs:hadoop (700) 5) # chown –R hdfs:hadoop /home/hadoop/data/dfs/journalnode 6) # chmod 700 /home/hadoop/data/dfs/journalnode // \$HADOOP_LOG_DIR = hdfs:hadoop (775) 7) # chown –R hdfs:hadoop /home/hadoop/logs 8) # chmod 775 /home/hadoop/logs // yarn.nodemanager.local-dirs = yarn:hadoop (755) 10) # chown -R yarn:hadoop /home/hadoop/data/yarn/nm-local-dir 11) # chmod 755 /home/hadoop/data/yarn/nm-local-dir ￭ HDFS 디렉토리 1) / = hdfs:hadoop (775) 2) /home/hadoop/bin/hdfs dfs –chown hdfs:hadoop / 3) /home/hadoop/bin/hdfs dfs –chmod 755 / 4) /user = hdfs:hadoop (755) 5) /home/hadoop/bin/hdfs dfs –chown hdfs:hadoop /user 6) /home/hadoop/bin/hdfs dfs –chmod 755 /user"
 
     local output
     output=$({
@@ -319,7 +319,7 @@ check_CSAP_Hadoop_02() {
     local detail=""
     local cmd="ls -al | grep *.keytab"
     local cur_state=""
-    local remediation="￭ root 외의 소유자로 지정, 권한은 400 이하로 설정 \(예시\) # chown hdfs:hadoop hdfs.keytab # chmod 400 hdfs.keytab # chown yarn:hadoop yarn.keytab # chmod 400 yarn.keytab # chown mapred:hadoop mapred.keytab # chmod 400 mapred.keytab"
+    local remediation="￭ root 외의 소유자로 지정, 권한은 400 이하로 설정 (예시) # chown hdfs:hadoop hdfs.keytab # chmod 400 hdfs.keytab # chown yarn:hadoop yarn.keytab # chmod 400 yarn.keytab # chown mapred:hadoop mapred.keytab # chmod 400 mapred.keytab"
 
     local vuln_found=false
     local checked_any=false
@@ -368,7 +368,7 @@ check_CSAP_Hadoop_03() {
     local detail=""
     local cmd="cat core-site.xml"
     local cur_state=""
-    local remediation="￭ core-site.xml에 kerberos 설정 1\) core-site.xml 파일에 아래와 같은 설정 사항 추가 # vi core-site.xml"
+    local remediation="￭ core-site.xml에 kerberos 설정 1) core-site.xml 파일에 아래와 같은 설정 사항 추가 # vi core-site.xml"
 
     local output
     output=$({
@@ -378,7 +378,7 @@ check_CSAP_Hadoop_03() {
 
     if [ -z "$output" ]; then
         status="취약"
-        detail="커버로스가 disable\(false\) 되어 있는 경우"
+        detail="커버로스가 disable(false) 되어 있는 경우"
     else
         if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
             local default_text
@@ -408,10 +408,10 @@ check_CSAP_Hadoop_03() {
         else
         if output_has_negative_marker "$output"; then
             status="취약"
-            detail="커버로스가 disable\(false\) 되어 있는 경우"
+            detail="커버로스가 disable(false) 되어 있는 경우"
         else
             status="양호"
-            detail="커버로스가 enable\(true\) 되어 있는 경우"
+            detail="커버로스가 enable(true) 되어 있는 경우"
         fi
         fi
     fi
@@ -426,7 +426,7 @@ check_CSAP_Hadoop_04() {
     local detail=""
     local cmd="cat hadoop-policy.xml | grep datanode.protocol.acl"
     local cur_state=""
-    local remediation="￭ hadoop-policy.xml ACL 설정 적용 1\) # vi hadoop-policy.xml <value> 인가된 계정 및 그룹명 </value> ※ 아무런 설정이 존재하지 않는 경우, default로 모두 접근 가능"
+    local remediation="￭ hadoop-policy.xml ACL 설정 적용 1) # vi hadoop-policy.xml <value> 인가된 계정 및 그룹명 </value> ※ 아무런 설정이 존재하지 않는 경우, default로 모두 접근 가능"
 
     local config_file="/etc/app/config"
     # Expand wildcards/find actual config
@@ -453,7 +453,7 @@ check_CSAP_Hadoop_05() {
     local detail=""
     local cmd="cat hdfs-site.xml"
     local cur_state=""
-    local remediation="￭ WebHDFS를 사용하지 않는 경우 hdfs-site.xml에서 설정 1\) # vi hdfs-site.xml"
+    local remediation="￭ WebHDFS를 사용하지 않는 경우 hdfs-site.xml에서 설정 1) # vi hdfs-site.xml"
 
     local output
     output=$({
@@ -514,7 +514,7 @@ check_CSAP_Hadoop_06() {
     local detail=""
     local cmd="cat core-site.xml"
     local cur_state=""
-    local remediation="￭ core-site.xml 파일 rpc 암호화 설정 1\) 아래와 같은 설정 사항 추가"
+    local remediation="￭ core-site.xml 파일 rpc 암호화 설정 1) 아래와 같은 설정 사항 추가"
 
     local output
     output=$({
@@ -575,7 +575,7 @@ check_CSAP_Hadoop_07() {
     local detail=""
     local cmd="cat hdfs-site.xml"
     local cur_state=""
-    local remediation="￭ hdfs-site.xml 파일에서 암호화 설정 활성화 1\) 아래와 같은 설정 사항 추가 ￭ hdfs-site.xml 파일에서 암호화 알고리즘 설정 1\) 아래와 같은 설정 사항 추가 ※ 하둡 v2.6 이전 <property> <name>dfs.encrypt.data.transfer.algorithm</name> <value>3des</value> </property>"
+    local remediation="￭ hdfs-site.xml 파일에서 암호화 설정 활성화 1) 아래와 같은 설정 사항 추가 ￭ hdfs-site.xml 파일에서 암호화 알고리즘 설정 1) 아래와 같은 설정 사항 추가 ※ 하둡 v2.6 이전 <property> <name>dfs.encrypt.data.transfer.algorithm</name> <value>3des</value> </property>"
 
     local output
     output=$({
@@ -636,7 +636,7 @@ check_CSAP_Hadoop_08() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 각 파일에 로그 파일 저장 경로를 지정하여 로그를 기록 및 검토 1\) hdfs-site.xml에서 로그 파일 경로 설정 2\) core-site.xml에서 로그 파일 경로 설정 확인 3\) yarn-site.xml에서 로그 파일 경로 설정 확인 4\) mapred-site.xml에서 로그 파일 경로 설정 확인"
+    local remediation="￭ 각 파일에 로그 파일 저장 경로를 지정하여 로그를 기록 및 검토 1) hdfs-site.xml에서 로그 파일 경로 설정 2) core-site.xml에서 로그 파일 경로 설정 확인 3) yarn-site.xml에서 로그 파일 경로 설정 확인 4) mapred-site.xml에서 로그 파일 경로 설정 확인"
 
     local config_file="/etc/app/config"
     # Expand wildcards/find actual config
@@ -663,7 +663,7 @@ check_CSAP_Hadoop_09() {
     local detail=""
     local cmd="hadoop version"
     local cur_state=""
-    local remediation="￭ 보안 패치 적용 1\) 보안 취약점이 존재하지 않는 버전으로 보안패치를 적용해야 함 ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
+    local remediation="￭ 보안 패치 적용 1) 보안 취약점이 존재하지 않는 버전으로 보안패치를 적용해야 함 ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
 
     local output
     output=$({

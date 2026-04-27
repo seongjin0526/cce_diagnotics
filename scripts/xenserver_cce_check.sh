@@ -231,7 +231,7 @@ check_CSAP_Xenserver_02() {
     local detail=""
     local cmd="cat /etc/passwd; grep /bin/bash /etc/passwd | cut -f1 -d:; userdel -r"
     local cur_state=""
-    local remediation="[클라우드 가이드] ￭ root 및 시스템 계정 외 UID가 0인 계정의 UID 값 변경 \(예시\) test 계정의 UID 를 2002로 바꿀 경우 # usermod -u 2002 test [주요기반시설 가이드] 불필요한 공용 계정 및 퇴사자 계정 제거 [상세 조치 사례] l XenServer, KVM Step 1\) 호스트 접속 Step 2\) 등록되어 있는 계정 확인 \$ grep /bin/bash /etc/passwd | cut -f1 -d: root user1 Step 3\) 불필요한 계정이 존재하는 경우 해당 계정 삭제 \$ userdel -r <계정명>"
+    local remediation="[클라우드 가이드] ￭ root 및 시스템 계정 외 UID가 0인 계정의 UID 값 변경 (예시) test 계정의 UID 를 2002로 바꿀 경우 # usermod -u 2002 test [주요기반시설 가이드] 불필요한 공용 계정 및 퇴사자 계정 제거 [상세 조치 사례] l XenServer, KVM Step 1) 호스트 접속 Step 2) 등록되어 있는 계정 확인 \$ grep /bin/bash /etc/passwd | cut -f1 -d: root user1 Step 3) 불필요한 계정이 존재하는 경우 해당 계정 삭제 \$ userdel -r <계정명>"
 
     local output
     output=$({
@@ -426,7 +426,7 @@ check_CSAP_Xenserver_04() {
     elif [ "$missing_only" = "true" ]; then
         status="N/A"
     fi
-    [ -z "$detail" ] && detail="/etc/group 파일의 소유자가 root\(또는" && cur_state="점검 대상 파일 없음"
+    [ -z "$detail" ] && detail="/etc/group 파일의 소유자가 root(또는" && cur_state="점검 대상 파일 없음"
 
     add_result "CSAP-Xenserver-04" "계정 관리" "group 파일 권한 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -437,7 +437,7 @@ check_CSAP_Xenserver_05() {
     local detail=""
     local cmd="cat /etc/login.defs | grep -i PASS_MAX_DAYS; cat /etc/login.defs | grep -i PASS_MIN_DAYS; cat /etc/login.defs | grep -i PASS_MIN_LEN"
     local cur_state=""
-    local remediation="￭ /etc/login.defs에서 아래와 같은 설정으로 변경 \(단위: 일\) #vi /etc/login.defs PASS_MIN_LEN 8 PASS_MAX_DAYS 70 PASS_MIN_DAYS 7"
+    local remediation="￭ /etc/login.defs에서 아래와 같은 설정으로 변경 (단위: 일) #vi /etc/login.defs PASS_MIN_LEN 8 PASS_MAX_DAYS 70 PASS_MIN_DAYS 7"
 
     local output
     output=$({
@@ -500,7 +500,7 @@ check_CSAP_Xenserver_06() {
     local detail=""
     local cmd="cat /etc/passwd"
     local cur_state=""
-    local remediation="￭ 로그인이 필요 없는 계정의 shell 설정 변경 #vi /etc/passwd를 실행하여 아래와 같은 설정으로 변경 \(단위: 주\) 예\) daemon 계정이 로그인하지 못하도록 설정 # vi /etc/passwd daemon:x:1:1::/:/sbin/ksh \(수정 전\) daemon:x:1:1::/:/bin/false \(수정 후\)"
+    local remediation="￭ 로그인이 필요 없는 계정의 shell 설정 변경 #vi /etc/passwd를 실행하여 아래와 같은 설정으로 변경 (단위: 주) 예) daemon 계정이 로그인하지 못하도록 설정 # vi /etc/passwd daemon:x:1:1::/:/sbin/ksh (수정 전) daemon:x:1:1::/:/bin/false (수정 후)"
 
     local output
     output=$({
@@ -605,7 +605,7 @@ check_CSAP_Xenserver_07() {
     fi
     [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
 
-    add_result "CSAP-Xenserver-07" "계정 관리" "SU\(Select User\) 사용 제한" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
+    add_result "CSAP-Xenserver-07" "계정 관리" "SU(Select User) 사용 제한" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
 
 # CSAP-Xenserver-08: 사용자 UMASK(User Mask) 설정
@@ -614,7 +614,7 @@ check_CSAP_Xenserver_08() {
     local detail=""
     local cmd="umask; cat /etc/profile | grep -i umask"
     local cur_state=""
-    local remediation="￭ UMASK 변경 1. /etc/pam.d/su 파일을 아래와 같이 설정. # umask 022 # vi /etc/profile umask 022 행 추가 ※ 계정의 Start Profile\(/etc/profile, /etc/default/login, .cshrc, .kshrc, .bashrc, .login, .profile 등\)에 명령을 추가하면, 사용자가 로그인 후에도 변경된 UMASK 값을 적용받음"
+    local remediation="￭ UMASK 변경 1. /etc/pam.d/su 파일을 아래와 같이 설정. # umask 022 # vi /etc/profile umask 022 행 추가 ※ 계정의 Start Profile(/etc/profile, /etc/default/login, .cshrc, .kshrc, .bashrc, .login, .profile 등)에 명령을 추가하면, 사용자가 로그인 후에도 변경된 UMASK 값을 적용받음"
 
     local output
     output=$({
@@ -671,14 +671,14 @@ check_CSAP_Xenserver_08() {
     fi
     [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
 
-    add_result "CSAP-Xenserver-08" "파일 시스템" "사용자 UMASK\(User Mask\) 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
+    add_result "CSAP-Xenserver-08" "파일 시스템" "사용자 UMASK(User Mask) 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
 
 # CSAP-Xenserver-09: SUID(Set User-Id), SGID(Set Group-Id)
 check_CSAP_Xenserver_09() {
     local status="양호"
     local detail=""
-    local cmd="find / -user root -type f \\\( -perm -4000 -o -perm -2000 \\\) -exec ls -lg {} \\;"
+    local cmd="find / -user root -type f \\( -perm -4000 -o -perm -2000 \\) -exec ls -lg {} \\;"
     local cur_state=""
     local remediation="￭ 불필요한 SUID, SGID 제거 # chmod -s [파일명]"
 
@@ -731,7 +731,7 @@ check_CSAP_Xenserver_09() {
     fi
     [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
 
-    add_result "CSAP-Xenserver-09" "파일 시스템" "SUID\(Set User-Id\), SGID\(Set Group-Id\)" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
+    add_result "CSAP-Xenserver-09" "파일 시스템" "SUID(Set User-Id), SGID(Set Group-Id)" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
 
 # CSAP-Xenserver-10: xsconsole 파일 권한 설정
@@ -972,7 +972,7 @@ check_CSAP_Xenserver_12() {
     elif [ "$missing_only" = "true" ]; then
         status="N/A"
     fi
-    [ -z "$detail" ] && detail="/etc/profile의 소유자가 root\(또는" && cur_state="점검 대상 파일 없음"
+    [ -z "$detail" ] && detail="/etc/profile의 소유자가 root(또는" && cur_state="점검 대상 파일 없음"
 
     add_result "CSAP-Xenserver-12" "파일 시스템" "/etc/profile 파일 권한 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -1021,7 +1021,7 @@ check_CSAP_Xenserver_13() {
     elif [ "$missing_only" = "true" ]; then
         status="N/A"
     fi
-    [ -z "$detail" ] && detail="/etc/hosts 파일의 소유자가 root\(또는" && cur_state="점검 대상 파일 없음"
+    [ -z "$detail" ] && detail="/etc/hosts 파일의 소유자가 root(또는" && cur_state="점검 대상 파일 없음"
 
     add_result "CSAP-Xenserver-13" "파일 시스템" "/etc/hosts 파일 권한 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -1070,7 +1070,7 @@ check_CSAP_Xenserver_14() {
     elif [ "$missing_only" = "true" ]; then
         status="N/A"
     fi
-    [ -z "$detail" ] && detail="/etc/issue 파일의 소유자가 root \(또는" && cur_state="점검 대상 파일 없음"
+    [ -z "$detail" ] && detail="/etc/issue 파일의 소유자가 root (또는" && cur_state="점검 대상 파일 없음"
 
     add_result "CSAP-Xenserver-14" "파일 시스템" "/etc/issue 파일 권한 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -1240,7 +1240,7 @@ check_CSAP_Xenserver_16() {
     elif [ "$missing_only" = "true" ]; then
         status="N/A"
     fi
-    [ -z "$detail" ] && detail="디렉터리의 권한을 root\(또는 bin\) 소유의 타" && cur_state="점검 대상 파일 없음"
+    [ -z "$detail" ] && detail="디렉터리의 권한을 root(또는 bin) 소유의 타" && cur_state="점검 대상 파일 없음"
 
     add_result "CSAP-Xenserver-16" "파일 시스템" "주요 디렉터리 파일 권한 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -1251,7 +1251,7 @@ check_CSAP_Xenserver_17() {
     local detail=""
     local cmd="echo \$PATH"
     local cur_state=""
-    local remediation="￭ root 계정의 환경변수 설정파일\(.profile, .cshrc등\)과 \"/etc/profile\" 등에서 PATH 환경변수에 포함된 현재 디렉터리를 나타내는 \".\"을 제거"
+    local remediation="￭ root 계정의 환경변수 설정파일(.profile, .cshrc등)과 \"/etc/profile\" 등에서 PATH 환경변수에 포함된 현재 디렉터리를 나타내는 \".\"을 제거"
 
     local output
     output=$({
@@ -1371,7 +1371,7 @@ check_CSAP_Xenserver_18() {
     elif [ "$missing_only" = "true" ]; then
         status="N/A"
     fi
-    [ -z "$detail" ] && detail="/etc/service 파일의 소유자가 root \(또는" && cur_state="점검 대상 파일 없음"
+    [ -z "$detail" ] && detail="/etc/service 파일의 소유자가 root (또는" && cur_state="점검 대상 파일 없음"
 
     add_result "CSAP-Xenserver-18" "파일 시스템" "/etc/service 파일 권한 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -1516,7 +1516,7 @@ check_CSAP_Xenserver_19() {
     elif [ "$missing_only" = "true" ]; then
         status="N/A"
     fi
-    [ -z "$detail" ] && detail="기타 중요 파일의 소유자가 root \(또는" && cur_state="점검 대상 파일 없음"
+    [ -z "$detail" ] && detail="기타 중요 파일의 소유자가 root (또는" && cur_state="점검 대상 파일 없음"
 
     add_result "CSAP-Xenserver-19" "파일 시스템" "부팅스크립트 파일 권한 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -1527,7 +1527,7 @@ check_CSAP_Xenserver_20() {
     local detail=""
     local cmd="cat /etc/ssh/sshd_config | grep Banner"
     local cur_state=""
-    local remediation="￭ Banner 설정 1. /etc/ssh/sshd_config 파일에 Banner 설정 # vi /etc/ssh/sshd_config Banner /etc/issue.net 2. /etc/issue.net 파일을 생성하고 경고 메시지 삽입 \(예시\) ################################################################# This system is for the use of authorized users only. Individuals using this computer system without authority, or in excess of their authority, are subject to having all of their activities on this system monitored and recorded by system personnel. In the course of monitoring individuals improperly using this system, or in the course of system maintenance, the activities of authorized users may also be monitored. Anyone using this system expressly consents to such monitoring and is advised that if such monitoring reveals possible evidence of criminal activity, system personnel may provide the evidence of such monitoring to law enforcement officials. #################################################################"
+    local remediation="￭ Banner 설정 1. /etc/ssh/sshd_config 파일에 Banner 설정 # vi /etc/ssh/sshd_config Banner /etc/issue.net 2. /etc/issue.net 파일을 생성하고 경고 메시지 삽입 (예시) ################################################################# This system is for the use of authorized users only. Individuals using this computer system without authority, or in excess of their authority, are subject to having all of their activities on this system monitored and recorded by system personnel. In the course of monitoring individuals improperly using this system, or in the course of system maintenance, the activities of authorized users may also be monitored. Anyone using this system expressly consents to such monitoring and is advised that if such monitoring reveals possible evidence of criminal activity, system personnel may provide the evidence of such monitoring to law enforcement officials. #################################################################"
 
     local config_file="/etc/ssh/sshd_config"
     # Expand wildcards/find actual config
@@ -1554,7 +1554,7 @@ check_CSAP_Xenserver_21() {
     local detail=""
     local cmd="cat /etc/profile | grep TMOUT"
     local cur_state=""
-    local remediation="￭ /etc/profile 파일에서 설정 /etc/profile 파일 안에 time out 설정 # vi /etc/profile TMOUT=300 export TMOUT ￭ xsconsole에서 설정 1. xsconsole → Authentication → Change Auto-Logout Time → 로그인 2. Timeout \(minutes\)에서 설정"
+    local remediation="￭ /etc/profile 파일에서 설정 /etc/profile 파일 안에 time out 설정 # vi /etc/profile TMOUT=300 export TMOUT ￭ xsconsole에서 설정 1. xsconsole → Authentication → Change Auto-Logout Time → 로그인 2. Timeout (minutes)에서 설정"
 
     local output
     output=$({
@@ -1614,7 +1614,7 @@ check_CSAP_Xenserver_22() {
     local detail=""
     local cmd="cat /etc/pam.d/login | grep pam_securetty.so; cat /etc/ssh/sshd_config | grep PermitRootLogin"
     local cur_state=""
-    local remediation="￭ root 원격 접속 제한 설정 1. /etc/pam.d/login 파일설정에 추가 설정 # vi /etc/pam.d/login auth required /lib/security/pam_securetty.so 2. /etc/ssh/sshd_config파일 설정 수정\(주석제거 또는 신규 삽입\) # vi /etc/ssh/sshd_config PermitRootLogin no"
+    local remediation="￭ root 원격 접속 제한 설정 1. /etc/pam.d/login 파일설정에 추가 설정 # vi /etc/pam.d/login auth required /lib/security/pam_securetty.so 2. /etc/ssh/sshd_config파일 설정 수정(주석제거 또는 신규 삽입) # vi /etc/ssh/sshd_config PermitRootLogin no"
 
     local config_file="/etc/pam.d/login"
     # Expand wildcards/find actual config
@@ -1641,7 +1641,7 @@ check_CSAP_Xenserver_23() {
     local detail=""
     local cmd="ssh -V"
     local cur_state=""
-    local remediation="￭ ssh 서비스 필요시 OpenSSH 업데이트 권장 ￭ ssh 서비스 불필요 시 1. 실행 중인 서비스 중지 # ps -ef | grep sshd root 414 0.0 0.7 2672 1692 /usr/sbin/sshd # kill 9 414 2. SSH가 시작되지 않도록 시작스크립트의 파일명 변경 \(OS마다 시작 스크립트 위치가 다름\) # ls -al /etc/rc*. d/* | grep sshd \(시작스크립트 파일 위치 확인\) # mv /etc/rc2.d/S55sshd /etc/rc2.d/_S55sshd ※ SSH 설정에 따라 /etc/ssh/sshd_config 파일 위치가 다를 수 있음"
+    local remediation="￭ ssh 서비스 필요시 OpenSSH 업데이트 권장 ￭ ssh 서비스 불필요 시 1. 실행 중인 서비스 중지 # ps -ef | grep sshd root 414 0.0 0.7 2672 1692 /usr/sbin/sshd # kill 9 414 2. SSH가 시작되지 않도록 시작스크립트의 파일명 변경 (OS마다 시작 스크립트 위치가 다름) # ls -al /etc/rc*. d/* | grep sshd (시작스크립트 파일 위치 확인) # mv /etc/rc2.d/S55sshd /etc/rc2.d/_S55sshd ※ SSH 설정에 따라 /etc/ssh/sshd_config 파일 위치가 다를 수 있음"
 
     local output
     output=$({
@@ -1690,7 +1690,7 @@ check_CSAP_Xenserver_23() {
     fi
     [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
 
-    add_result "CSAP-Xenserver-23" "" "SSH\(Secure Shell\) 버전 취약점" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
+    add_result "CSAP-Xenserver-23" "" "SSH(Secure Shell) 버전 취약점" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
 
 # CSAP-Xenserver-24: 불필요한 서비스 제거
@@ -1889,7 +1889,7 @@ check_CSAP_Xenserver_27() {
 
     if [ -z "$output" ]; then
         status="양호"
-        detail="Guest OS \(Virtual Machine\) Group이"
+        detail="Guest OS (Virtual Machine) Group이"
     else
         if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
             local default_text
@@ -1932,7 +1932,7 @@ check_CSAP_Xenserver_28() {
     local detail=""
     local cmd="cat /etc/syslog.conf | grep authpriv.*; cat /etc/rsyslog.conf | grep authpriv.*"
     local cur_state=""
-    local remediation="￭ /etc/syslog.conf 파일에서 설정 \(6버전\) # vi /etc/syslog.conf 파일에서 아래와 같은 설정으로 변경 authpriv.* /var/log/secure # /etc/rc.d/init.d/syslog restart ￭ /etc/rsyslog.conf 파일에서 설정 \(7, 8 버전\) # vi /etc/rsyslog.conf 파일에서 아래와 같은 설정으로 변경 authpriv.* /var/log/secure # systemctl restart rsyslog"
+    local remediation="￭ /etc/syslog.conf 파일에서 설정 (6버전) # vi /etc/syslog.conf 파일에서 아래와 같은 설정으로 변경 authpriv.* /var/log/secure # /etc/rc.d/init.d/syslog restart ￭ /etc/rsyslog.conf 파일에서 설정 (7, 8 버전) # vi /etc/rsyslog.conf 파일에서 아래와 같은 설정으로 변경 authpriv.* /var/log/secure # systemctl restart rsyslog"
 
     local config_file="/var/log/secure"
     # Expand wildcards/find actual config
@@ -1959,7 +1959,7 @@ check_CSAP_Xenserver_29() {
     local detail=""
     local cmd="cat /etc/syslog.conf | egrep info|alert|notice|debug|warn|error | egrep var|log; cat /etc/rsyslog.conf | egrep info|alert|notice|debug|warn|error | egrep var|log"
     local cur_state=""
-    local remediation="￭ XenServer 로그 파일 설정 1. /etc/\(r\)syslog.conf 파일을 점검하여, info, alert 등에 대한 로그 파일을 설정 # vi /etc/\(r\)syslog.conf *.notice /var/log/messages *.emerg * *.alert /dev/console # Set info,warn,error to log to syslog by default info;audit;syslog:local6 warn;;syslog:xapi error;;syslog:xapi # Also print everything \(debug<->error\) into xensource.log for easier debugging debug;;file:/var/log/xensource.log info;;file:/var/log/xensource.log warn;;file:/var/log/xensource.log error;;file:/var/log/xensource.log 2. \"\(r\)syslog.conf\"파일을 수정한 후에는 이것이 적용되도록 다음의 명령을 사용하여 syslogd restart # /etc/rc.d/init.d/syslog restart"
+    local remediation="￭ XenServer 로그 파일 설정 1. /etc/(r)syslog.conf 파일을 점검하여, info, alert 등에 대한 로그 파일을 설정 # vi /etc/(r)syslog.conf *.notice /var/log/messages *.emerg * *.alert /dev/console # Set info,warn,error to log to syslog by default info;audit;syslog:local6 warn;;syslog:xapi error;;syslog:xapi # Also print everything (debug<->error) into xensource.log for easier debugging debug;;file:/var/log/xensource.log info;;file:/var/log/xensource.log warn;;file:/var/log/xensource.log error;;file:/var/log/xensource.log 2. \"(r)syslog.conf\"파일을 수정한 후에는 이것이 적용되도록 다음의 명령을 사용하여 syslogd restart # /etc/rc.d/init.d/syslog restart"
 
     local config_file="/etc/syslog.conf"
     # Expand wildcards/find actual config
@@ -1986,7 +1986,7 @@ check_CSAP_Xenserver_30() {
     local detail=""
     local cmd="netstat -an | grep udp; netstat -an | grep udp | egrep 514"
     local cur_state=""
-    local remediation="￭ Remote Log 서버 필요시 Remote Log 사용 시 보안담당자 및 담당 매니저와의 협의 필요 ￭ Remote Log 서버 불필요시 syslog.conf 파일 수정\(\"/etc/sysconfig/syslog\" 파일에 \"SYSLOGD_OPTIONS\"의 \"-r\" 옵션 삭제\) # vi /etc/sysconfig/syslog SYSLOGD_OPTIONS=\"-m 0\" ￭ Remote Log 서버 불필요시 \(7 버전, 8 버전\) Syslog.conf 파일 수정\(\"/etc/sysconfig/rsyslog\" 파일에 \"SYSLOGD_OPTIONS\"의 \"-r\" 옵션 삭제\) # vi /etc/sysconfig/rsyslog SYSLOGD_OPTIONS=\"-m 0\""
+    local remediation="￭ Remote Log 서버 필요시 Remote Log 사용 시 보안담당자 및 담당 매니저와의 협의 필요 ￭ Remote Log 서버 불필요시 syslog.conf 파일 수정(\"/etc/sysconfig/syslog\" 파일에 \"SYSLOGD_OPTIONS\"의 \"-r\" 옵션 삭제) # vi /etc/sysconfig/syslog SYSLOGD_OPTIONS=\"-m 0\" ￭ Remote Log 서버 불필요시 (7 버전, 8 버전) Syslog.conf 파일 수정(\"/etc/sysconfig/rsyslog\" 파일에 \"SYSLOGD_OPTIONS\"의 \"-r\" 옵션 삭제) # vi /etc/sysconfig/rsyslog SYSLOGD_OPTIONS=\"-m 0\""
 
     local output
     output=$({
@@ -2040,7 +2040,7 @@ check_CSAP_Xenserver_31() {
     local detail=""
     local cmd="cat /etc/syslog.conf | grep info"
     local cur_state=""
-    local remediation="[XenServer] ￭ 로깅 수준 설정 /etc/syslog.conf\" 파일에 \"info\" 로그를 남기도록 설정 # vi /etc/syslog.conf\" info;;file:/var/log/xensource.log ￭ 로깅 수준 설정 \(7 버전, 8 버전\) /etc/rsyslog.d/xenserver.conf 파일에 \"info\" 로그를 남기도록 설정 # vi /etc/rsyslog.d/xenserver.conf [XenCenter] ￭ 로깅 수준 설정 XenCenter에서 [XenServer]를 선택 한 후 [Logs] 메뉴에서 \"Information\"에서 로그 설정 ￭ 로깅 수준 설정 \(6.5 이후 버전\) XenCenter에서 왼쪽 패널 하단 Notification에서 Information 로그 설정"
+    local remediation="[XenServer] ￭ 로깅 수준 설정 /etc/syslog.conf\" 파일에 \"info\" 로그를 남기도록 설정 # vi /etc/syslog.conf\" info;;file:/var/log/xensource.log ￭ 로깅 수준 설정 (7 버전, 8 버전) /etc/rsyslog.d/xenserver.conf 파일에 \"info\" 로그를 남기도록 설정 # vi /etc/rsyslog.d/xenserver.conf [XenCenter] ￭ 로깅 수준 설정 XenCenter에서 [XenServer]를 선택 한 후 [Logs] 메뉴에서 \"Information\"에서 로그 설정 ￭ 로깅 수준 설정 (6.5 이후 버전) XenCenter에서 왼쪽 패널 하단 Notification에서 Information 로그 설정"
 
     local config_file="/etc/syslog.conf"
     # Expand wildcards/find actual config
@@ -2212,7 +2212,7 @@ check_CSAP_Xenserver_33() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="￭ 설정 기준 권고 \(또는 정책 기준\) 1. 보안취약점이 발표되면 시스템 영향도를 평가하고, 긴급 대응책 및 중장기 대응책을 마련하여 계획과 허가에 의해 대응하는 것이 좋다. 2. 패치를 수행할 시 시스템의 영향도에 따라 패치를 차등 수행하도록 한다. 3. 시스템 운영에 영향을 주지 않는 범위 내에서 주기적으로 패치를 수행할 것을 권고함"
+    local remediation="￭ 설정 기준 권고 (또는 정책 기준) 1. 보안취약점이 발표되면 시스템 영향도를 평가하고, 긴급 대응책 및 중장기 대응책을 마련하여 계획과 허가에 의해 대응하는 것이 좋다. 2. 패치를 수행할 시 시스템의 영향도에 따라 패치를 차등 수행하도록 한다. 3. 시스템 운영에 영향을 주지 않는 범위 내에서 주기적으로 패치를 수행할 것을 권고함"
 
     status="수동점검"
     detail="수동 점검 필요 항목입니다. 패치 적용 정책을 수립하여 주기적으로"
@@ -2227,7 +2227,7 @@ check_ISMS_HV_01() {
     local detail=""
     local cmd="echo \$TMOUT"
     local cur_state=""
-    local remediation="600초\(10분\) 동안 입력이 없을 경우 접속된 클라이언트 세션을 끊도록 설정 [상세 조치 사례] l XenServer, KVM [사용자 Shell Session Timeout 설정] Step 1\) 호스트에 접속 Step 2\) echo \$TMOUT 명령어를 이용하여 사용자 Shell Session Timeout 설정 확인 \$ echo \$TMOUT Step 3\) Session Timeout 10분을 초과하는 경우 아래 두 라인 추가 \$ vi /etc/profile readonly TMOUT=600; export TMOUT Step 4\) 변경된 설정 적용 \$ source /etc/profile"
+    local remediation="600초(10분) 동안 입력이 없을 경우 접속된 클라이언트 세션을 끊도록 설정 [상세 조치 사례] l XenServer, KVM [사용자 Shell Session Timeout 설정] Step 1) 호스트에 접속 Step 2) echo \$TMOUT 명령어를 이용하여 사용자 Shell Session Timeout 설정 확인 \$ echo \$TMOUT Step 3) Session Timeout 10분을 초과하는 경우 아래 두 라인 추가 \$ vi /etc/profile readonly TMOUT=600; export TMOUT Step 4) 변경된 설정 적용 \$ source /etc/profile"
 
     local output
     output=$({
@@ -2237,7 +2237,7 @@ check_ISMS_HV_01() {
 
     if [ -z "$output" ]; then
         status="취약"
-        detail="웹 콘솔 및 사용자 Shell Session Timeout 설정이 600초\(10분\)를 초과하여 설정된 경우"
+        detail="웹 콘솔 및 사용자 Shell Session Timeout 설정이 600초(10분)를 초과하여 설정된 경우"
     else
         if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
             local default_text
@@ -2269,14 +2269,14 @@ check_ISMS_HV_01() {
         numeric_value=$(first_numeric_value "$output")
         if [ -z "$numeric_value" ] || [ "$numeric_value" -eq 0 ] 2>/dev/null; then
             status="취약"
-            detail="웹 콘솔 및 사용자 Shell Session Timeout 설정이 600초\(10분\)를 초과하여 설정된 경우"
+            detail="웹 콘솔 및 사용자 Shell Session Timeout 설정이 600초(10분)를 초과하여 설정된 경우"
         else
             if [ "$numeric_value" -le 600 ] 2>/dev/null; then
                 status="양호"
-                detail="웹 콘솔 및 사용자 Shell Session Timeout 설정이 600초\(10분\) 이하로 설정된 경우"
+                detail="웹 콘솔 및 사용자 Shell Session Timeout 설정이 600초(10분) 이하로 설정된 경우"
             else
                 status="취약"
-                detail="웹 콘솔 및 사용자 Shell Session Timeout 설정이 600초\(10분\)를 초과하여 설정된 경우"
+                detail="웹 콘솔 및 사용자 Shell Session Timeout 설정이 600초(10분)를 초과하여 설정된 경우"
             fi
         fi
         fi
@@ -2292,7 +2292,7 @@ check_ISMS_HV_02() {
     local detail=""
     local cmd="iptables -nL --line-number; IPTables IP; iptables -I RH-Firewall-1-INPUT 1 -p tcp -s --dport 22 -j"
     local cur_state=""
-    local remediation="호스트에서 제공하는 방화벽 애플리케이션을 이용하여 서비스 접속 허용 IP 등록 설정 [상세 조치 사례] l XenServer, KVM [IPTables를 통한 접근 통제] Step 1\) 호스트 접속 \$ iptables -nL --line-number Chain INPUT \(policy ACCEPT\) num target prot opt source destination 1 xapi_nbd_input_chain tcp -- 0.0.0.0/0 0.0.0.0/0 tcp dpt:10809 2 ACCEPT 47 -- 0.0.0.0/0 0.0.0.0/0 3 RH-Firewall-1-INPUT all -- 0.0.0.0/0 0.0.0.0/0 … 중간 생략 … Chain RH-Firewall-1-INPUT \(2 references\) num target prot opt source destination 1 ACCEPT all -- 0.0.0.0/0 0.0.0.0/0 2 ACCEPT icmp -- 0.0.0.0/0 0.0.0.0/0 icmptype 255 3 ACCEPT udp -- 0.0.0.0/0 0.0.0.0/0 udp dpt:67 4 ACCEPT all -- 0.0.0.0/0 0.0.0.0/0 ctstate RELATED,ESTABLISHED 5 ACCEPT udp -- 0.0.0.0/0 0.0.0.0/0 ctstate NEW udp dpt:694 11. 가상화 장비 Step 2\) IPTables 정책 목록을 통해 접속 IP 제한 설정 확인 Step 3\) SSH 원격 접속을 허용된 IP로만 제한 \$ iptables -I RH-Firewall-1-INPUT 1 -p tcp -s <허용 IP> --dport 22 -j ACCEPT \$ iptables -I RH-Firewall-1-INPUT 2 -p tcp -s 0.0.0.0/0 --dport 22 -j DROP Step 4\) IPTables의 변경된 정책 저장 및 서비스 재시작 \$ service iptables save \$ service iptables restart"
+    local remediation="호스트에서 제공하는 방화벽 애플리케이션을 이용하여 서비스 접속 허용 IP 등록 설정 [상세 조치 사례] l XenServer, KVM [IPTables를 통한 접근 통제] Step 1) 호스트 접속 \$ iptables -nL --line-number Chain INPUT (policy ACCEPT) num target prot opt source destination 1 xapi_nbd_input_chain tcp -- 0.0.0.0/0 0.0.0.0/0 tcp dpt:10809 2 ACCEPT 47 -- 0.0.0.0/0 0.0.0.0/0 3 RH-Firewall-1-INPUT all -- 0.0.0.0/0 0.0.0.0/0 … 중간 생략 … Chain RH-Firewall-1-INPUT (2 references) num target prot opt source destination 1 ACCEPT all -- 0.0.0.0/0 0.0.0.0/0 2 ACCEPT icmp -- 0.0.0.0/0 0.0.0.0/0 icmptype 255 3 ACCEPT udp -- 0.0.0.0/0 0.0.0.0/0 udp dpt:67 4 ACCEPT all -- 0.0.0.0/0 0.0.0.0/0 ctstate RELATED,ESTABLISHED 5 ACCEPT udp -- 0.0.0.0/0 0.0.0.0/0 ctstate NEW udp dpt:694 11. 가상화 장비 Step 2) IPTables 정책 목록을 통해 접속 IP 제한 설정 확인 Step 3) SSH 원격 접속을 허용된 IP로만 제한 \$ iptables -I RH-Firewall-1-INPUT 1 -p tcp -s <허용 IP> --dport 22 -j ACCEPT \$ iptables -I RH-Firewall-1-INPUT 2 -p tcp -s 0.0.0.0/0 --dport 22 -j DROP Step 4) IPTables의 변경된 정책 저장 및 서비스 재시작 \$ service iptables save \$ service iptables restart"
 
     status="수동점검"
     detail="서비스 상태 수동 확인 필요. 허용된 IP에서만 관리 콘솔 및 원격 접속이 가능하도록 제한된 경우"
@@ -2307,7 +2307,7 @@ check_ISMS_HV_05() {
     local detail=""
     local cmd="grep /bin/bash /etc/passwd | cut -f1 -d:; gpasswd -d user1 users; xe subject-list"
     local cur_state=""
-    local remediation="불필요한 권한이 부여된 계정에 대한 권한 제거 [상세 조치 사례] l XenServer [Active Directory에 가입되어 있지 않은 경우] Step 1\) 호스트에 접속 Step 2\) bash 사용자 목록 확인 \$ grep /bin/bash /etc/passwd | cut -f1 -d: root user1 Step 3\) 불필요한 계정 제거 \$ gpasswd -d user1 users [Active Directory에 가입되어 있는 경우] Step 4\) 호스트에 접속 Step 5\) 계정별 부여된 권한 확인 \$ xe subject-list uuid \( RO\): bb6dd239-1fa9-a06b-a497-3be28b8dca44 subject-identifier \( RO\): S-1-5-21-1539997073-1618981536-2562117463-2244 other-config \(MRO\): subject-name: example01\\user_vm_admin; subject-upn: \\ user_vm_admin@XENDT.NET; subject-uid: 1823475908; subject-gid: 1823474177; \\ subject-sid: S-1-5-21-1539997073-1618981536-2562117463-2244; subject-gecos: \\ user_vm_admin; subject-displayname: user_vm_admin; subject-is-group: false; \\ subject-account-disabled: false; subject-account-expired: false; \\ subject-account-locked: false;subject-password-expired: false Step 6\) 부적절한 권한이 있는 경우 기존의 역할을 제거하고 새로운 역할을 추가 \$ xe subject-role-remove uuid=<subject uuid> role-name=<role_name_to_remove> \$ xe subject-role-add uuid=<subject uuid > role-name=<role_name_to_add>"
+    local remediation="불필요한 권한이 부여된 계정에 대한 권한 제거 [상세 조치 사례] l XenServer [Active Directory에 가입되어 있지 않은 경우] Step 1) 호스트에 접속 Step 2) bash 사용자 목록 확인 \$ grep /bin/bash /etc/passwd | cut -f1 -d: root user1 Step 3) 불필요한 계정 제거 \$ gpasswd -d user1 users [Active Directory에 가입되어 있는 경우] Step 4) 호스트에 접속 Step 5) 계정별 부여된 권한 확인 \$ xe subject-list uuid ( RO): bb6dd239-1fa9-a06b-a497-3be28b8dca44 subject-identifier ( RO): S-1-5-21-1539997073-1618981536-2562117463-2244 other-config (MRO): subject-name: example01\\user_vm_admin; subject-upn: \\ user_vm_admin@XENDT.NET; subject-uid: 1823475908; subject-gid: 1823474177; \\ subject-sid: S-1-5-21-1539997073-1618981536-2562117463-2244; subject-gecos: \\ user_vm_admin; subject-displayname: user_vm_admin; subject-is-group: false; \\ subject-account-disabled: false; subject-account-expired: false; \\ subject-account-locked: false;subject-password-expired: false Step 6) 부적절한 권한이 있는 경우 기존의 역할을 제거하고 새로운 역할을 추가 \$ xe subject-role-remove uuid=<subject uuid> role-name=<role_name_to_remove> \$ xe subject-role-add uuid=<subject uuid > role-name=<role_name_to_add>"
 
     local output
     output=$({
@@ -2362,7 +2362,7 @@ check_ISMS_HV_06() {
     local detail=""
     local cmd="cat /etc/login.defs | grep -i PASS_MAX_DAYS; cat /etc/login.defs | grep -i PASS_MIN_DAYS; cat /etc/login.defs | grep -i PASS_MIN_LEN"
     local cur_state=""
-    local remediation="로그인 계정 비밀번호를 관리 정책에 맞게 설정 [상세 조치 사례] l XenServer Step 1\) XenServer 접속 >　Local Command Shell 실행 Step 2\) 아래 명령어를 통해 비밀번호 설정 확인 # cat /etc/login.defs | grep –i \"PASS_MAX_DAYS\" # cat /etc/login.defs | grep –i \"PASS_MIN_DAYS\" # cat /etc/login.defs | grep -i \"PASS_MIN_LEN\" Step 3\) 아래 명령어 적용 # vi /etc/login.defs PASS_MIN_LEN 8 PASS_MAX_DAYS 90 PASS_MIN_DAYS 7"
+    local remediation="로그인 계정 비밀번호를 관리 정책에 맞게 설정 [상세 조치 사례] l XenServer Step 1) XenServer 접속 >　Local Command Shell 실행 Step 2) 아래 명령어를 통해 비밀번호 설정 확인 # cat /etc/login.defs | grep –i \"PASS_MAX_DAYS\" # cat /etc/login.defs | grep –i \"PASS_MIN_DAYS\" # cat /etc/login.defs | grep -i \"PASS_MIN_LEN\" Step 3) 아래 명령어 적용 # vi /etc/login.defs PASS_MIN_LEN 8 PASS_MAX_DAYS 90 PASS_MIN_DAYS 7"
 
     local output
     output=$({
@@ -2425,7 +2425,7 @@ check_ISMS_HV_08() {
     local detail=""
     local cmd="cat /etc/ssh/sshd_config | grep Banner"
     local cur_state=""
-    local remediation="시스템 사용 주의사항 출력 설정 [상세 조치 사례] l XenServer Step 1\) 배너 설정 여부 확인 # cat /etc/ssh/sshd_config | grep \"Banner\" Step 2\) /etc/sshd/sshd_config 파일에 배너 내용 삽입 # vi /etc/sshd/sshd_config Banner /etc/issue.net \(예시\) This system is for the use of authorized users only. l XenServer Step 1\) XenServer 접속 > Network and Management Interface > Network Time \(NTP\) > Provide NTP Servers Manually > 별도 NTP 서버 지정 설정 적용"
+    local remediation="시스템 사용 주의사항 출력 설정 [상세 조치 사례] l XenServer Step 1) 배너 설정 여부 확인 # cat /etc/ssh/sshd_config | grep \"Banner\" Step 2) /etc/sshd/sshd_config 파일에 배너 내용 삽입 # vi /etc/sshd/sshd_config Banner /etc/issue.net (예시) This system is for the use of authorized users only. l XenServer Step 1) XenServer 접속 > Network and Management Interface > Network Time (NTP) > Provide NTP Servers Manually > 별도 NTP 서버 지정 설정 적용"
 
     local config_file="/etc/ssh/sshd_config"
     # Expand wildcards/find actual config
@@ -2452,7 +2452,7 @@ check_ISMS_HV_10() {
     local detail=""
     local cmd="수동점검 필요"
     local cur_state=""
-    local remediation="SNMP Community String을 복잡도를 만족하는 값으로 설정 [상세 조치 사례] l XenServer Step 1\) XenCenter 접속 Step 2\) 해당 서버 설정 > SNMP Step 3\) SNMP 활성화 여부 확인 Step 4\) 활성화 또는 필요에 의해 사용 시 Community String 값 확인 [ SNMP Community String 값 확인 ]"
+    local remediation="SNMP Community String을 복잡도를 만족하는 값으로 설정 [상세 조치 사례] l XenServer Step 1) XenCenter 접속 Step 2) 해당 서버 설정 > SNMP Step 3) SNMP 활성화 여부 확인 Step 4) 활성화 또는 필요에 의해 사용 시 Community String 값 확인 [ SNMP Community String 값 확인 ]"
 
     status="수동점검"
     detail="수동 점검 필요 항목입니다. SNMP Community String이 복잡도를 만족하는 경우"
@@ -2467,7 +2467,7 @@ check_ISMS_HV_14() {
     local detail=""
     local cmd="netstat -an | grep udp"
     local cur_state=""
-    local remediation="원격 로그 서버 또는 스토리지 연동 설정 [상세 조치 사례] l XenServer Step 1\) Remote Log 서버 사용 유무 확인 Step 2\) udp514 Port 확인 # netstat -an | grep \"udp\" 또는 # netstat -an | grep \" udp\" | egrep \"514\" Step 3\) Syslog.conf 파일 수정\(\"/etc/sysconfig/syslog\" 파일에 \"SYSLOGD_OPTIONS\"의 \"-r\" 옵션 삭제\) # vi /etc/sysconfig/syslog SYSLOGD_OPTIONS=\"-m 0\""
+    local remediation="원격 로그 서버 또는 스토리지 연동 설정 [상세 조치 사례] l XenServer Step 1) Remote Log 서버 사용 유무 확인 Step 2) udp514 Port 확인 # netstat -an | grep \"udp\" 또는 # netstat -an | grep \" udp\" | egrep \"514\" Step 3) Syslog.conf 파일 수정(\"/etc/sysconfig/syslog\" 파일에 \"SYSLOGD_OPTIONS\"의 \"-r\" 옵션 삭제) # vi /etc/sysconfig/syslog SYSLOGD_OPTIONS=\"-m 0\""
 
     local output
     output=$({
@@ -2528,7 +2528,7 @@ check_ISMS_HV_19() {
     local detail=""
     local cmd="xe vm-list name-label=; xe vbd-list vm-uuid=; xe vdi-list"
     local cur_state=""
-    local remediation="불필요한 장치 연결 해제 적용 [상세 조치 사례] l XenServer Step 1\) 장치 연결상태 확인 1. PCI 장치 목록 확인 lspci 2. 블록 디바이스 목록 확인 lsblk 3. 네트워크 인터페이스 확인 ifconfig 또는 ip addr 4.가상 머신의 디스크 목록 확인 xe vm-list name-label=\"<VM_NAME>\" 5. VM에 연결된 디스크 확인 xe vbd-list vm-uuid=<VM_UUID> 6. 모든 가상 디스크 이미지 목록 확인 xe vdi-list 7. 네트워크 인터페이스 목록 확인 xe vif-list 8. USB 장치 확인 lsusb 9. 디스크 용량 및 사용 현황 확인 df –h Step 2\) 불필요한 외부 장치 비활성화 842"
+    local remediation="불필요한 장치 연결 해제 적용 [상세 조치 사례] l XenServer Step 1) 장치 연결상태 확인 1. PCI 장치 목록 확인 lspci 2. 블록 디바이스 목록 확인 lsblk 3. 네트워크 인터페이스 확인 ifconfig 또는 ip addr 4.가상 머신의 디스크 목록 확인 xe vm-list name-label=\"<VM_NAME>\" 5. VM에 연결된 디스크 확인 xe vbd-list vm-uuid=<VM_UUID> 6. 모든 가상 디스크 이미지 목록 확인 xe vdi-list 7. 네트워크 인터페이스 목록 확인 xe vif-list 8. USB 장치 확인 lsusb 9. 디스크 용량 및 사용 현황 확인 df –h Step 2) 불필요한 외부 장치 비활성화 842"
 
     local output
     output=$({
@@ -2591,7 +2591,7 @@ check_ISMS_HV_23() {
     local detail=""
     local cmd="xe pif-list network-name-label=; xe vif-list vm-name-label=; xe pif-param-list uuid="
     local cur_state=""
-    local remediation="가상 스위치 무차별\(Promiscuous\) 모드 정책 거부 설정 [상세 조치 사례] l XenServer Step 1\) 가상 스위치 Promiscuous 모드 조회 Step 2\) XenServer CLI 접속 후, 다음 명령어 실행하여 uuid_of_pif/vif 확인 \$ xe pif-list network-name-label=<네트워크 이름> \$ xe vif-list vm-name-label=<VM 이름> Step 3\) 다음 명령어 실행하여 promiscuous 값 확인 \$ xe pif-param-list uuid=<uuid_of_pif> \$ xe vif-param-list uuid=<uuid_of_vif> Step 4\) 다음 명령어 실행하여 promiscuous 값 설정 \$ xe pif-param-set uuid=<uuid_of_pif> other-config:promiscuous=\"false\" \$ xe vif-param-set uuid=<uuid_of_vif> other-config:promiscuous=\"false\" 848"
+    local remediation="가상 스위치 무차별(Promiscuous) 모드 정책 거부 설정 [상세 조치 사례] l XenServer Step 1) 가상 스위치 Promiscuous 모드 조회 Step 2) XenServer CLI 접속 후, 다음 명령어 실행하여 uuid_of_pif/vif 확인 \$ xe pif-list network-name-label=<네트워크 이름> \$ xe vif-list vm-name-label=<VM 이름> Step 3) 다음 명령어 실행하여 promiscuous 값 확인 \$ xe pif-param-list uuid=<uuid_of_pif> \$ xe vif-param-list uuid=<uuid_of_vif> Step 4) 다음 명령어 실행하여 promiscuous 값 설정 \$ xe pif-param-set uuid=<uuid_of_pif> other-config:promiscuous=\"false\" \$ xe vif-param-set uuid=<uuid_of_vif> other-config:promiscuous=\"false\" 848"
 
     local output
     output=$({
@@ -2633,19 +2633,19 @@ check_ISMS_HV_23() {
         else
         if output_has_negative_marker "$output"; then
             status="양호"
-            detail="가상 스위치 무차별\(Promiscuous\) 모드 정책 설정이 거부로 설정된 경우"
+            detail="가상 스위치 무차별(Promiscuous) 모드 정책 설정이 거부로 설정된 경우"
         elif output_has_positive_marker "$output"; then
             status="취약"
-            detail="가상 스위치 무차별\(Promiscuous\) 모드 정책 설정이 허용으로 설정된 경우"
+            detail="가상 스위치 무차별(Promiscuous) 모드 정책 설정이 허용으로 설정된 경우"
         else
             status="취약"
-            detail="가상 스위치 무차별\(Promiscuous\) 모드 정책 설정이 허용으로 설정된 경우"
+            detail="가상 스위치 무차별(Promiscuous) 모드 정책 설정이 허용으로 설정된 경우"
         fi
         fi
     fi
     [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
 
-    add_result "ISMS-HV-23" "가상화 장비 > 4. 가상 네트워크 관리" "가상스위치 무차별\(Promiscuous\) 모드 정책 비활성화" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
+    add_result "ISMS-HV-23" "가상화 장비 > 4. 가상 네트워크 관리" "가상스위치 무차별(Promiscuous) 모드 정책 비활성화" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
 
 

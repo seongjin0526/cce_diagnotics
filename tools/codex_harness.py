@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import json
+import os
 import py_compile
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -312,8 +314,241 @@ def check_auto_judgement_harness() -> CheckResult:
             result.ok = False
             result.details.append("Linux PATH dot rule did not mark vulnerable case")
 
+        docker_root_only = apply_auto_judgement_harness(
+            "Docker",
+            [
+                {
+                    "code": "CSAP-Docker-02",
+                    "status": "수동점검",
+                    "detail": "명령 실행 결과 확인. 수동 검증 필요.",
+                    "current_state": "docker:x:2375:root\nroot:x:0:",
+                }
+            ],
+        )[0]
+        if docker_root_only["status"] != "양호":
+            result.ok = False
+            result.details.append("Docker group root-only rule did not mark good case")
+
+        docker_extra_member = apply_auto_judgement_harness(
+            "Docker",
+            [
+                {
+                    "code": "CSAP-Docker-02",
+                    "status": "수동점검",
+                    "detail": "명령 실행 결과 확인. 수동 검증 필요.",
+                    "current_state": "docker:x:2375:alice\nroot:x:0:",
+                }
+            ],
+        )[0]
+        if docker_extra_member["status"] != "취약":
+            result.ok = False
+            result.details.append("Docker group extra-member rule did not mark vulnerable case")
+
         if result.ok:
             result.details.append("manual-to-auto fixture cases passed")
+    except Exception as exc:  # noqa: BLE001
+        result.ok = False
+        result.details.append(str(exc))
+    return result
+
+
+def check_docker_generation_harness() -> CheckResult:
+    result = CheckResult(name="Docker generation harness")
+    script_path = REPO_ROOT / "scripts" / "docker_cce_check.sh"
+    text = script_path.read_text(encoding="utf-8")
+
+    required_snippets = (
+        'cmd="getent group docker dockerroot root; grep -E \\"^(docker|dockerroot|root):\\" /etc/group"',
+        'extra_members=$(printf',
+        'audit_target="/usr/bin/docker"',
+        'audit_target="/var/lib/docker"',
+        'audit_target="/etc/docker"',
+        'audit_target="/lib/systemd/system/docker.service"',
+        'audit_target="/lib/systemd/system/docker.socket"',
+        'audit_target="/etc/default/docker"',
+        'cur_state="${output:-감사 규칙 없음}"',
+    )
+    for snippet in required_snippets:
+        if snippet not in text:
+            result.ok = False
+            result.details.append(f"missing expected Docker generated logic: {snippet}")
+
+    if result.ok:
+        result.details.append("Docker group and audit auto-verdict logic present")
+    return result
+
+
+def check_k8s_runtime_harness() -> CheckResult:
+    result = CheckResult(name="Kubernetes runtime harness")
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            manifests = base / "manifests"
+            manifests.mkdir()
+            encryption_config = base / "encryption.yaml"
+            encryption_config.write_text(
+                "\n".join(
+                    [
+                        "resources:",
+                        "- resources: [secrets]",
+                        "  providers:",
+                        "  - aescbc:",
+                        "      keys:",
+                        "      - name: key1",
+                        "        secret: abc",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (manifests / "kube-apiserver.yaml").write_text(
+                "\n".join(
+                    [
+                        "spec:",
+                        "  containers:",
+                        "  - command:",
+                        "    - kube-apiserver",
+                        "    - --anonymous-auth=false",
+                        "    - --service-account-lookup=true",
+                        "    - --authorization-mode=Node,RBAC",
+                        "    - --enable-admission-plugins=NodeRestriction,PodSecurity",
+                        "    - --secure-port=6443",
+                        "    - --kubelet-certificate-authority=/etc/kubernetes/pki/ca.crt",
+                        "    - --kubelet-client-certificate=/etc/kubernetes/pki/apiserver-kubelet-client.crt",
+                        "    - --kubelet-client-key=/etc/kubernetes/pki/apiserver-kubelet-client.key",
+                        "    - --tls-cert-file=/etc/kubernetes/pki/apiserver.crt",
+                        "    - --tls-private-key-file=/etc/kubernetes/pki/apiserver.key",
+                        "    - --client-ca-file=/etc/kubernetes/pki/ca.crt",
+                        "    - --tls-cipher-suites=TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+                        "    - --audit-log-path=/var/log/kubernetes/audit.log",
+                        "    - --audit-policy-file=/etc/kubernetes/audit-policy.yaml",
+                        "    - --audit-log-maxage=30",
+                        "    - --audit-log-maxbackup=10",
+                        "    - --audit-log-maxsize=100",
+                        f"    - --encryption-provider-config={encryption_config}",
+                        "    - --etcd-certfile=/etc/kubernetes/pki/apiserver-etcd-client.crt",
+                        "    - --etcd-keyfile=/etc/kubernetes/pki/apiserver-etcd-client.key",
+                        "    - --etcd-cafile=/etc/kubernetes/pki/etcd/ca.crt",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (manifests / "kube-scheduler.yaml").write_text(
+                "spec:\n  containers:\n  - command:\n    - kube-scheduler\n    - --bind-address=127.0.0.1\n",
+                encoding="utf-8",
+            )
+            (manifests / "kube-controller-manager.yaml").write_text(
+                "\n".join(
+                    [
+                        "spec:",
+                        "  containers:",
+                        "  - command:",
+                        "    - kube-controller-manager",
+                        "    - --bind-address=127.0.0.1",
+                        "    - --use-service-account-credentials=true",
+                        "    - --service-account-private-key-file=/etc/kubernetes/pki/sa.key",
+                        "    - --root-ca-file=/etc/kubernetes/pki/ca.crt",
+                        "    - --feature-gates=RotateKubeletServerCertificate=true",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            (manifests / "etcd.yaml").write_text(
+                "\n".join(
+                    [
+                        "spec:",
+                        "  containers:",
+                        "  - command:",
+                        "    - etcd",
+                        "    - --client-cert-auth=true",
+                        "    - --peer-client-cert-auth=true",
+                        "    - --cert-file=/etc/kubernetes/pki/etcd/server.crt",
+                        "    - --key-file=/etc/kubernetes/pki/etcd/server.key",
+                        "    - --peer-cert-file=/etc/kubernetes/pki/etcd/peer.crt",
+                        "    - --peer-key-file=/etc/kubernetes/pki/etcd/peer.key",
+                        "    - --trusted-ca-file=/etc/kubernetes/pki/etcd/ca.crt",
+                        "    - --auto-tls=false",
+                        "    - --peer-auto-tls=false",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            master_output = base / "master.json"
+            master_env = os.environ.copy()
+            master_env["K8S_MANIFEST_DIR"] = str(manifests)
+            master_run = subprocess.run(
+                ["sh", str(REPO_ROOT / "scripts" / "k8s_master_cce_check.sh"), str(master_output)],
+                cwd=REPO_ROOT,
+                env=master_env,
+                capture_output=True,
+                text=True,
+            )
+            if master_run.returncode != 0:
+                result.ok = False
+                result.details.append(f"k8s master fixture failed: {(master_run.stdout + master_run.stderr).strip()}")
+            else:
+                master_data = json.loads(master_output.read_text(encoding="utf-8"))
+                master_status = {
+                    item["code"]: item["status"]
+                    for item in master_data["results"]
+                    if item["code"].startswith("CSAP-K8sMaster-")
+                }
+                for number in range(1, 12):
+                    code = f"CSAP-K8sMaster-{number:02d}"
+                    if master_status.get(code) != "양호":
+                        result.ok = False
+                        result.details.append(f"{code} => {master_status.get(code)} (expected 양호)")
+
+            kubelet_config = base / "kubelet-config.yaml"
+            kubelet_service = base / "10-kubeadm.conf"
+            kubelet_config.write_text(
+                "\n".join(
+                    [
+                        "anonymous:",
+                        "  enabled: false",
+                        "readOnlyPort: 0",
+                        "authorization:",
+                        "  mode: Webhook",
+                        "clientCAFile: /etc/kubernetes/pki/ca.crt",
+                        "serverTLSBootstrap: true",
+                        "rotateCertificates: true",
+                        "tlsCipherSuites:",
+                        "- TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+                        "protectKernelDefaults: true",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            kubelet_service.write_text('Environment="KUBELET_EXTRA_ARGS=--read-only-port=0"\n', encoding="utf-8")
+            worker_output = base / "worker.json"
+            worker_env = os.environ.copy()
+            worker_env["KUBELET_CONF"] = str(kubelet_config)
+            worker_env["KUBELET_SERVICE_CONF"] = str(kubelet_service)
+            worker_run = subprocess.run(
+                ["sh", str(REPO_ROOT / "scripts" / "k8s_worker_cce_check.sh"), str(worker_output)],
+                cwd=REPO_ROOT,
+                env=worker_env,
+                capture_output=True,
+                text=True,
+            )
+            if worker_run.returncode != 0:
+                result.ok = False
+                result.details.append(f"k8s worker fixture failed: {(worker_run.stdout + worker_run.stderr).strip()}")
+            else:
+                worker_data = json.loads(worker_output.read_text(encoding="utf-8"))
+                worker_status = {
+                    item["code"]: item["status"]
+                    for item in worker_data["results"]
+                    if item["code"].startswith("CSAP-K8sWorker-")
+                }
+                for number in range(1, 5):
+                    code = f"CSAP-K8sWorker-{number:02d}"
+                    if worker_status.get(code) != "양호":
+                        result.ok = False
+                        result.details.append(f"{code} => {worker_status.get(code)} (expected 양호)")
+
+        if result.ok:
+            result.details.append("K8s master 01-11 and worker 01-04 fixture runs passed")
     except Exception as exc:  # noqa: BLE001
         result.ok = False
         result.details.append(str(exc))
@@ -392,6 +627,8 @@ def main() -> int:
         check_shell_scripts(),
         check_powershell_script(),
         check_auto_judgement_harness(),
+        check_docker_generation_harness(),
+        check_k8s_runtime_harness(),
         check_mongodb_observation_harness(),
         check_execution_trace_harness(),
         scan_patterns("Legacy AI residue scan", TRACKED_TEXT_FORBIDDEN),

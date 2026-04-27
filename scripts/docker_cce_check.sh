@@ -84,7 +84,7 @@ add_result() {
     current_state=$(sanitize_json_value "$current_state")
     remediation=$(sanitize_json_value "$remediation")
 
-    echo "{\"code\":\"$code\",\"category\":\"$category\",\"title\":\"$title\",\"importance\":\"$importance\",\"status\":\"$status\",\"detail\":\"$detail\",\"source\":\"$source\",\"command\":\"$command\",\"current_state\":\"$current_state\",\"remediation\":\"$remediation\"}" >> "$RESULTS_FILE"
+    printf '%s\n' "{\"code\":\"$code\",\"category\":\"$category\",\"title\":\"$title\",\"importance\":\"$importance\",\"status\":\"$status\",\"detail\":\"$detail\",\"source\":\"$source\",\"command\":\"$command\",\"current_state\":\"$current_state\",\"remediation\":\"$remediation\"}" >> "$RESULTS_FILE"
     log_result_trace "$code" "$status" "$title" "$raw_command" "$raw_current_state" "$raw_detail"
 }
 
@@ -199,7 +199,7 @@ check_CSAP_Docker_01() {
     local detail=""
     local cmd="docker version; dpkg -l | grep docker.io; rpm -qa | grep docker.io"
     local cur_state=""
-    local remediation="￭ 보안 패치 적용 1\) 보안 취약점이 존재하지 않는 버전으로 보안패치를 적용해야 함 ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
+    local remediation="￭ 보안 패치 적용 1) 보안 취약점이 존재하지 않는 버전으로 보안패치를 적용해야 함 ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
 
     local output
     output=$({
@@ -254,57 +254,21 @@ check_CSAP_Docker_02() {
     local detail=""
     local cmd="cat /etc/group | grep docker; cat /etc/group | grep root"
     local cur_state=""
-    local remediation="￭ 도커 그룹에서 불필요한 사용자 제거 1\) # vi /etc/group 입력 후, 불필요한 사용자 계정 제거 ￭ 도커 그룹 이름이 dockerroot인 경우 1\) root 그룹, dockerroot 그룹 모두 불필요한 사용자 계정 제거 # vi /etc/group"
+    local remediation="￭ 도커 그룹에서 불필요한 사용자 제거 1) # vi /etc/group 입력 후, 불필요한 사용자 계정 제거 ￭ 도커 그룹 이름이 dockerroot인 경우 1) root 그룹, dockerroot 그룹 모두 불필요한 사용자 계정 제거 # vi /etc/group"
 
-    local output
-    output=$({
-        ( get_process_snapshot "docker" )
-        ( get_process_snapshot "root" )
-    } 2>/dev/null | sed '/^$/d' | head -20)
-    cur_state="$output"
-
-    if [ -z "$output" ]; then
-        status="N/A"
-        detail="명령 실행 결과 없음 또는 대상 미설치. "
+    cmd="getent group docker dockerroot root; grep -E \"^(docker|dockerroot|root):\" /etc/group"
+    local group_output
+    local extra_members
+    group_output=$({ getent group docker dockerroot root 2>/dev/null; grep -E "^(docker|dockerroot|root):" /etc/group 2>/dev/null; } | awk -F: '!seen[$1]++' | head -20)
+    cur_state="${group_output:-그룹 정보 없음}"
+    extra_members=$(printf '%s\n' "$group_output" | awk -F: '$1=="docker" || $1=="dockerroot" || $1=="root" { n=split($4, members, ","); for (i=1; i<=n; i++) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", members[i]); if (members[i] != "" && members[i] != "root" && !seen[members[i]]++) { if (out != "") out=out ","; out=out members[i]; } } } END { print out }')
+    if [ -n "$extra_members" ]; then
+        status="취약"
+        detail="docker/dockerroot/root 그룹에 불필요할 수 있는 사용자($extra_members)가 포함되어 있습니다."
     else
-        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="해당 파일이 없으므로 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
-            local missing_text
-            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
-            status="수동점검"
-            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
-        else
-        local docker_members
-        docker_members=$(printf '%s\n' "$output" | awk -F: '/docker/ {gsub(/[[:space:]]/, "", $NF); print $NF; exit}')
-        if [ -z "$docker_members" ] || [ "$docker_members" = "root" ]; then
-            status="양호"
-            detail="도커 그룹에 불필요한 사용자가 존재하지"
-        else
-            status="취약"
-            detail="도커 그룹에 불필요한 사용자가 존재하는"
-        fi
-        fi
+        status="양호"
+        detail="docker/dockerroot/root 그룹에 root 이외 추가 사용자를 확인하지 못했습니다."
     fi
-    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
 
     add_result "CSAP-Docker-02" "Host 설정" "도커 그룹에 불필요한 사용자 제거" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -315,57 +279,20 @@ check_CSAP_Docker_03() {
     local detail=""
     local cmd="auditctl -l | grep /usr/bin/docker"
     local cur_state=""
-    local remediation="￭ audit 설정 적용 1\) auditd 설치 2\) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 3\) audit 데몬 재시작 # service auditd restart"
+    local remediation="￭ audit 설정 적용 1) auditd 설치 2) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 3) audit 데몬 재시작 # service auditd restart"
 
+    cmd="auditctl -l | grep -F -- \"/usr/bin/docker\"; grep -RhsF -- \"/usr/bin/docker\" /etc/audit/rules.d /etc/audit/audit.rules"
+    local audit_target="/usr/bin/docker"
     local output
-    output=$({
-        ( get_process_snapshot "/usr/bin/docker" )
-    } 2>/dev/null | sed '/^$/d' | head -20)
-    cur_state="$output"
-
-    if [ -z "$output" ]; then
-        status="N/A"
-        detail="명령 실행 결과 없음 또는 대상 미설치. "
+    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; grep -RhsF -- "$audit_target" /etc/audit/rules.d /etc/audit/audit.rules 2>/dev/null; } | sed '/^$/d' | head -20)
+    cur_state="${output:-감사 규칙 없음}"
+    if [ -n "$output" ]; then
+        status="양호"
+        detail="/usr/bin/docker 파일에 감사 설정이 적용되어 있습니다."
     else
-        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="해당 파일이 없으므로 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
-            local missing_text
-            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
-            status="수동점검"
-            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
-        else
-        if output_has_negative_marker "$output"; then
-            status="양호"
-            detail="/usr/bin/docker 파일에 감사 설정이"
-        elif output_has_positive_marker "$output"; then
-            status="취약"
-            detail="/usr/bin/docker 파일에 감사 설정이"
-        else
-            status="취약"
-            detail="/usr/bin/docker 파일에 감사 설정이"
-        fi
-        fi
+        status="취약"
+        detail="/usr/bin/docker 파일에 감사 설정을 확인하지 못했습니다."
     fi
-    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
 
     add_result "CSAP-Docker-03" "Host 설정" "Docker daemon audit 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -376,57 +303,20 @@ check_CSAP_Docker_04() {
     local detail=""
     local cmd="auditctl -l | grep /var/lib/docker"
     local cur_state=""
-    local remediation="￭ audit 설정 적용 1\) auditd 설치 2\) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 3\) audit 데몬 재시작 # service auditd restart"
+    local remediation="￭ audit 설정 적용 1) auditd 설치 2) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 3) audit 데몬 재시작 # service auditd restart"
 
+    cmd="auditctl -l | grep -F -- \"/var/lib/docker\"; grep -RhsF -- \"/var/lib/docker\" /etc/audit/rules.d /etc/audit/audit.rules"
+    local audit_target="/var/lib/docker"
     local output
-    output=$({
-        ( get_process_snapshot "/var/lib/docker" )
-    } 2>/dev/null | sed '/^$/d' | head -20)
-    cur_state="$output"
-
-    if [ -z "$output" ]; then
-        status="N/A"
-        detail="명령 실행 결과 없음 또는 대상 미설치. "
+    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; grep -RhsF -- "$audit_target" /etc/audit/rules.d /etc/audit/audit.rules 2>/dev/null; } | sed '/^$/d' | head -20)
+    cur_state="${output:-감사 규칙 없음}"
+    if [ -n "$output" ]; then
+        status="양호"
+        detail="/var/lib/docker 디렉터리에 감사 설정이 적용되어 있습니다."
     else
-        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="해당 파일이 없으므로 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
-            local missing_text
-            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
-            status="수동점검"
-            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
-        else
-        if output_has_negative_marker "$output"; then
-            status="양호"
-            detail="/var/lib/docker 디렉터리에 감사 설정이"
-        elif output_has_positive_marker "$output"; then
-            status="취약"
-            detail="/var/lib/docker 디렉터리에 감사 설정이"
-        else
-            status="취약"
-            detail="/var/lib/docker 디렉터리에 감사 설정이"
-        fi
-        fi
+        status="취약"
+        detail="/var/lib/docker 디렉터리에 감사 설정을 확인하지 못했습니다."
     fi
-    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
 
     add_result "CSAP-Docker-04" "Host 설정" "/var/lib/docker audit 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -437,57 +327,20 @@ check_CSAP_Docker_05() {
     local detail=""
     local cmd="auditctl -l | grep /etc/docker"
     local cur_state=""
-    local remediation="￭ audit 설정 적용 1\) auditd 설치 2\) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 3\) audit 데몬 재시작 # service auditd restart"
+    local remediation="￭ audit 설정 적용 1) auditd 설치 2) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 3) audit 데몬 재시작 # service auditd restart"
 
+    cmd="auditctl -l | grep -F -- \"/etc/docker\"; grep -RhsF -- \"/etc/docker\" /etc/audit/rules.d /etc/audit/audit.rules"
+    local audit_target="/etc/docker"
     local output
-    output=$({
-        ( get_process_snapshot "/etc/docker" )
-    } 2>/dev/null | sed '/^$/d' | head -20)
-    cur_state="$output"
-
-    if [ -z "$output" ]; then
-        status="N/A"
-        detail="명령 실행 결과 없음 또는 대상 미설치. "
+    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; grep -RhsF -- "$audit_target" /etc/audit/rules.d /etc/audit/audit.rules 2>/dev/null; } | sed '/^$/d' | head -20)
+    cur_state="${output:-감사 규칙 없음}"
+    if [ -n "$output" ]; then
+        status="양호"
+        detail="/etc/docker 디렉터리에 감사 설정이 적용되어 있습니다."
     else
-        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="해당 파일이 없으므로 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
-            local missing_text
-            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
-            status="수동점검"
-            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
-        else
-        if output_has_negative_marker "$output"; then
-            status="양호"
-            detail="/etc/docker 디렉터리에 감사 설정이"
-        elif output_has_positive_marker "$output"; then
-            status="취약"
-            detail="/etc/docker 디렉터리에 감사 설정이"
-        else
-            status="취약"
-            detail="/etc/docker 디렉터리에 감사 설정이"
-        fi
-        fi
+        status="취약"
+        detail="/etc/docker 디렉터리에 감사 설정을 확인하지 못했습니다."
     fi
-    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
 
     add_result "CSAP-Docker-05" "Host 설정" "/etc/docker audit 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -498,57 +351,20 @@ check_CSAP_Docker_06() {
     local detail=""
     local cmd="auditctl -l | grep /lib/systemd/system/docker.service"
     local cur_state=""
-    local remediation="￭ audit 설정 적용 1\) auditd 설치 2\) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 3\) audit 데몬 재시작 # service auditd restart"
+    local remediation="￭ audit 설정 적용 1) auditd 설치 2) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 3) audit 데몬 재시작 # service auditd restart"
 
+    cmd="auditctl -l | grep -F -- \"/lib/systemd/system/docker.service\"; grep -RhsF -- \"/lib/systemd/system/docker.service\" /etc/audit/rules.d /etc/audit/audit.rules"
+    local audit_target="/lib/systemd/system/docker.service"
     local output
-    output=$({
-        ( get_process_snapshot "/lib/systemd/system/docker.service" )
-    } 2>/dev/null | sed '/^$/d' | head -20)
-    cur_state="$output"
-
-    if [ -z "$output" ]; then
-        status="N/A"
-        detail="명령 실행 결과 없음 또는 대상 미설치. "
+    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; grep -RhsF -- "$audit_target" /etc/audit/rules.d /etc/audit/audit.rules 2>/dev/null; } | sed '/^$/d' | head -20)
+    cur_state="${output:-감사 규칙 없음}"
+    if [ -n "$output" ]; then
+        status="양호"
+        detail="docker.service 파일에 감사 설정이 적용되어 있습니다."
     else
-        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="해당 파일이 없으므로 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
-            local missing_text
-            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
-            status="수동점검"
-            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
-        else
-        if output_has_negative_marker "$output"; then
-            status="양호"
-            detail="docker.service 파일에 감사 설정이"
-        elif output_has_positive_marker "$output"; then
-            status="취약"
-            detail="docker.service 파일에 감사 설정이"
-        else
-            status="취약"
-            detail="docker.service 파일에 감사 설정이"
-        fi
-        fi
+        status="취약"
+        detail="docker.service 파일에 감사 설정을 확인하지 못했습니다."
     fi
-    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
 
     add_result "CSAP-Docker-06" "Host 설정" "docker.service audit 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -559,57 +375,20 @@ check_CSAP_Docker_07() {
     local detail=""
     local cmd="auditctl -l | grep /lib/systemd/system/docker.socket"
     local cur_state=""
-    local remediation="￭ audit 설정 적용 1\) auditd 설치 2\) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 3\) audit 데몬 재시작 # service auditd restart"
+    local remediation="￭ audit 설정 적용 1) auditd 설치 2) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 3) audit 데몬 재시작 # service auditd restart"
 
+    cmd="auditctl -l | grep -F -- \"/lib/systemd/system/docker.socket\"; grep -RhsF -- \"/lib/systemd/system/docker.socket\" /etc/audit/rules.d /etc/audit/audit.rules"
+    local audit_target="/lib/systemd/system/docker.socket"
     local output
-    output=$({
-        ( get_process_snapshot "/lib/systemd/system/docker.socket" )
-    } 2>/dev/null | sed '/^$/d' | head -20)
-    cur_state="$output"
-
-    if [ -z "$output" ]; then
-        status="N/A"
-        detail="명령 실행 결과 없음 또는 대상 미설치. "
+    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; grep -RhsF -- "$audit_target" /etc/audit/rules.d /etc/audit/audit.rules 2>/dev/null; } | sed '/^$/d' | head -20)
+    cur_state="${output:-감사 규칙 없음}"
+    if [ -n "$output" ]; then
+        status="양호"
+        detail="docker.socket 파일에 감사 설정이 적용되어 있습니다."
     else
-        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="해당 파일이 없으므로 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
-            local missing_text
-            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
-            status="수동점검"
-            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
-        else
-        if output_has_negative_marker "$output"; then
-            status="양호"
-            detail="docker.socket 파일에 감사 설정이"
-        elif output_has_positive_marker "$output"; then
-            status="취약"
-            detail="docker.socket 파일에 감사 설정이"
-        else
-            status="취약"
-            detail="docker.socket 파일에 감사 설정이"
-        fi
-        fi
+        status="취약"
+        detail="docker.socket 파일에 감사 설정을 확인하지 못했습니다."
     fi
-    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
 
     add_result "CSAP-Docker-07" "Host 설정" "docker.socket audit 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -620,57 +399,20 @@ check_CSAP_Docker_08() {
     local detail=""
     local cmd="auditctl -l | grep /etc/default/docker"
     local cur_state=""
-    local remediation="￭ audit 설정 적용 1\) auditd 설치 2\) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 \(Debian 계열\) 2\) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 \(RedHat 계열\) -w /etc/default/docker –k docker 3\) audit 데몬 재시작 # service auditd restart"
+    local remediation="￭ audit 설정 적용 1) auditd 설치 2) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 (Debian 계열) 2) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 (RedHat 계열) -w /etc/default/docker –k docker 3) audit 데몬 재시작 # service auditd restart"
 
+    cmd="auditctl -l | grep -F -- \"/etc/default/docker\"; grep -RhsF -- \"/etc/default/docker\" /etc/audit/rules.d /etc/audit/audit.rules"
+    local audit_target="/etc/default/docker"
     local output
-    output=$({
-        ( get_process_snapshot "/etc/default/docker" )
-    } 2>/dev/null | sed '/^$/d' | head -20)
-    cur_state="$output"
-
-    if [ -z "$output" ]; then
-        status="N/A"
-        detail="명령 실행 결과 없음 또는 대상 미설치. "
+    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; grep -RhsF -- "$audit_target" /etc/audit/rules.d /etc/audit/audit.rules 2>/dev/null; } | sed '/^$/d' | head -20)
+    cur_state="${output:-감사 규칙 없음}"
+    if [ -n "$output" ]; then
+        status="양호"
+        detail="/etc/default/docker 파일에 감사 설정이 적용되어 있습니다."
     else
-        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="해당 파일이 없으므로 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
-            local missing_text
-            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
-            status="수동점검"
-            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
-        else
-        if output_has_negative_marker "$output"; then
-            status="양호"
-            detail="/etc/default/docker 파일에 감사 설정이"
-        elif output_has_positive_marker "$output"; then
-            status="취약"
-            detail="/etc/default/docker 파일에 감사 설정이"
-        else
-            status="취약"
-            detail="/etc/default/docker 파일에 감사 설정이"
-        fi
-        fi
+        status="취약"
+        detail="/etc/default/docker 파일에 감사 설정을 확인하지 못했습니다."
     fi
-    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
 
     add_result "CSAP-Docker-08" "Host 설정" "/etc/default/docker audit 설정" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -681,7 +423,7 @@ check_CSAP_Docker_09() {
     local detail=""
     local cmd="ps -ef | grep docker; docker network ls --quiet | xargs docker network inspect --format {{; docker"
     local cur_state=""
-    local remediation="￭ 아래와 같은 옵션으로 데몬 재시작 1\) # dockerd --icc=true ￭ /etc/default/docker 파일에 아래와 같은 옵션 추가 후 데몬 재시작 1\) dockerd, docker.socket, docker.service 중지 2\) /etc/default/docker에 DOCKER_OPTS=\"--icc=false\" 문구 추가 3\) /lib/systemd/system/docker.service에 아래의 내용 추가 4\) docker.socket, docker.service, dockerd 재시작 5\) # ps –ef | grep docker 명령어 입력하여 --icc=false 옵션 적용 확인"
+    local remediation="￭ 아래와 같은 옵션으로 데몬 재시작 1) # dockerd --icc=true ￭ /etc/default/docker 파일에 아래와 같은 옵션 추가 후 데몬 재시작 1) dockerd, docker.socket, docker.service 중지 2) /etc/default/docker에 DOCKER_OPTS=\"--icc=false\" 문구 추가 3) /lib/systemd/system/docker.service에 아래의 내용 추가 4) docker.socket, docker.service, dockerd 재시작 5) # ps –ef | grep docker 명령어 입력하여 --icc=false 옵션 적용 확인"
 
     local output
     output=$({
@@ -744,7 +486,7 @@ check_CSAP_Docker_10() {
     local detail=""
     local cmd="ps -ef | grep docker; docker plugin ls; docker search hello-world"
     local cur_state=""
-    local remediation="￭ 인증 플러그인 설치 ￭ 다음과 같은 절차로 인증 설정 1\) 인증 플러그인 설치 2\) 인증 정책 설정 3\) 아래와 같은 옵션으로 데몬 시작 \(방법1\) docker daemon --authorization-plugin=<PLUGIN_ID> \(방법2\) /etc/default/docker 파일에 아래와 같은 옵션 추가 후 데몬 재시작 DOCKER_OPTS=\" --authorization-plugin-<PLUGIN_ID>\" \(방법3\) /etc/docker/daemon.json 파일에 아래와 같은 옵션 추가 후 데몬 재시작 { \"authorization-plugins\": [ \"PLUGIN_ID\" ]}"
+    local remediation="￭ 인증 플러그인 설치 ￭ 다음과 같은 절차로 인증 설정 1) 인증 플러그인 설치 2) 인증 정책 설정 3) 아래와 같은 옵션으로 데몬 시작 (방법1) docker daemon --authorization-plugin=<PLUGIN_ID> (방법2) /etc/default/docker 파일에 아래와 같은 옵션 추가 후 데몬 재시작 DOCKER_OPTS=\" --authorization-plugin-<PLUGIN_ID>\" (방법3) /etc/docker/daemon.json 파일에 아래와 같은 옵션 추가 후 데몬 재시작 { \"authorization-plugins\": [ \"PLUGIN_ID\" ]}"
 
     local output
     output=$({
@@ -807,7 +549,7 @@ check_CSAP_Docker_11() {
     local detail=""
     local cmd="ps -ef | grep docker"
     local cur_state=""
-    local remediation="￭ 아래와 같은 옵션으로 데몬 시작 1\) # docker daemon —disable-legacy-registry 2\) /etc/default/docker 파일에 아래의 옵션 추가 후 데몬 재시작 Docker_OPTS=\"--disable-legacy-registry\""
+    local remediation="￭ 아래와 같은 옵션으로 데몬 시작 1) # docker daemon —disable-legacy-registry 2) /etc/default/docker 파일에 아래의 옵션 추가 후 데몬 재시작 Docker_OPTS=\"--disable-legacy-registry\""
 
     local output
     output=$({
@@ -859,7 +601,7 @@ check_CSAP_Docker_11() {
     fi
     [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
 
-    add_result "CSAP-Docker-11" "" "legacty registry \(v1\) 비활성화" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
+    add_result "CSAP-Docker-11" "" "legacty registry (v1) 비활성화" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
 
 # CSAP-Docker-12: 추가 권한 획득으로부터 컨테이너 제한
@@ -868,7 +610,7 @@ check_CSAP_Docker_12() {
     local detail=""
     local cmd="docker ps -quiet -all; docker inspect | grep SecurityOpt; docker ps --quiet --all | xargs docker inspect --format {{ .Id }}:"
     local cur_state=""
-    local remediation="￭ 컨테이너 옵션 실행 1\) # docker run --security-opt=no-new-privileges"
+    local remediation="￭ 컨테이너 옵션 실행 1) # docker run --security-opt=no-new-privileges"
 
     local output
     output=$({
@@ -931,7 +673,7 @@ check_CSAP_Docker_13() {
     local detail=""
     local cmd="ls -l /lib/systemd/system/docker.service; stat -c %U:%G /lib/systemd/system/docker.service"
     local cur_state=""
-    local remediation="￭ docker.service 파일의 소유자 및 소유 그룹을 root:root로 변경 1\) # chown root:root /lib/systemd/system/docker.service"
+    local remediation="￭ docker.service 파일의 소유자 및 소유 그룹을 root:root로 변경 1) # chown root:root /lib/systemd/system/docker.service"
 
     local vuln_found=false
     local checked_any=false
@@ -980,7 +722,7 @@ check_CSAP_Docker_14() {
     local detail=""
     local cmd="systemctl show -p FragmentPath docker.service; ls -l /lib/systemd/system/docker.service"
     local cur_state=""
-    local remediation="￭ docker.service 파일 접근 권한 수정 1\) # chmod 644 /lib/systemd/system/docker.service"
+    local remediation="￭ docker.service 파일 접근 권한 수정 1) # chmod 644 /lib/systemd/system/docker.service"
 
     local svc_status
     svc_status=$(is_service_active "docker.service")
@@ -1001,7 +743,7 @@ check_CSAP_Docker_15() {
     local detail=""
     local cmd="systemctl show -p FragmentPath docker.socket; ls -l /lib/systemd/system/docker.socket; stat -c %U:%G /lib/systemd/system/docker.socket"
     local cur_state=""
-    local remediation="￭ docker.socket 파일 소유자 및 소유 그룹 수정 1\) # chown root:root /lib/systemd/system/docker.socket"
+    local remediation="￭ docker.socket 파일 소유자 및 소유 그룹 수정 1) # chown root:root /lib/systemd/system/docker.socket"
 
     local svc_status
     svc_status=$(is_service_active "docker.socket")
@@ -1022,7 +764,7 @@ check_CSAP_Docker_16() {
     local detail=""
     local cmd="systemctl show -p FragmentPath docker.socket; ls -l /lib/systemd/system/docker.socket"
     local cur_state=""
-    local remediation="￭ docker.socket 파일 접근 권한 수정 1\) # chmod 644 /lib/systemd/system/docker.socket"
+    local remediation="￭ docker.socket 파일 접근 권한 수정 1) # chmod 644 /lib/systemd/system/docker.socket"
 
     local svc_status
     svc_status=$(is_service_active "docker.socket")
@@ -1043,7 +785,7 @@ check_CSAP_Docker_17() {
     local detail=""
     local cmd="ls -ld /etc/docker; stat -c %U:%G /etc/docker"
     local cur_state=""
-    local remediation="￭ /etc/docker 디렉터리 소유자 및 소유 그룹 수정 1\) # chown root:root /etc/docker"
+    local remediation="￭ /etc/docker 디렉터리 소유자 및 소유 그룹 수정 1) # chown root:root /etc/docker"
 
     local vuln_found=false
     local checked_any=false
@@ -1092,7 +834,7 @@ check_CSAP_Docker_18() {
     local detail=""
     local cmd="ls -ld /etc/docker; stat -c %a /etc/docker"
     local cur_state=""
-    local remediation="￭ /etc/docker 디렉터리 접근 권한 수정 1\) # chmod 755 /etc/docker"
+    local remediation="￭ /etc/docker 디렉터리 접근 권한 수정 1) # chmod 755 /etc/docker"
 
     local vuln_found=false
     local checked_any=false
@@ -1141,7 +883,7 @@ check_CSAP_Docker_19() {
     local detail=""
     local cmd="ls -l /var/run/docker.sock; stat -c %U:%G /var/run/docker.sock"
     local cur_state=""
-    local remediation="￭ /var/dun/docker.sock 파일 소유자 및 소유 그룹 수정 1\) # chown root:docker /var/run/docker.sock \(Debian 계열\) 2\) # chown root:docker /run/docker.sock \(RedHat 계열\)"
+    local remediation="￭ /var/dun/docker.sock 파일 소유자 및 소유 그룹 수정 1) # chown root:docker /var/run/docker.sock (Debian 계열) 2) # chown root:docker /run/docker.sock (RedHat 계열)"
 
     local vuln_found=false
     local checked_any=false
@@ -1190,7 +932,7 @@ check_CSAP_Docker_20() {
     local detail=""
     local cmd="ls -l /var/run/docker.sock; stat -c %a /var/run/docker.sock"
     local cur_state=""
-    local remediation="￭ /var/dun/docker.sock 파일 접근 권한 수정 1\) # chmod 660 /var/run/docker.sock"
+    local remediation="￭ /var/dun/docker.sock 파일 접근 권한 수정 1) # chmod 660 /var/run/docker.sock"
 
     local vuln_found=false
     local checked_any=false
@@ -1239,7 +981,7 @@ check_CSAP_Docker_21() {
     local detail=""
     local cmd="ls -l /etc/docker/daemon.json; stat -c %U:%G /etc/docker/daemon.json"
     local cur_state=""
-    local remediation="￭ daemon.json 파일 소유자 및 소유 그룹 수정 1\) # chown root:root /etc/docker/daemon.json"
+    local remediation="￭ daemon.json 파일 소유자 및 소유 그룹 수정 1) # chown root:root /etc/docker/daemon.json"
 
     local vuln_found=false
     local checked_any=false
@@ -1288,7 +1030,7 @@ check_CSAP_Docker_22() {
     local detail=""
     local cmd="ls -l /etc/docker/daemon.json; stat -c %a /etc/docker/daemon.json"
     local cur_state=""
-    local remediation="￭ daemon.json 파일 접근 권한 수정 1\) # chmod 644 /etc/docker/daemon.json"
+    local remediation="￭ daemon.json 파일 접근 권한 수정 1) # chmod 644 /etc/docker/daemon.json"
 
     local vuln_found=false
     local checked_any=false
@@ -1337,7 +1079,7 @@ check_CSAP_Docker_23() {
     local detail=""
     local cmd="ls -l /etc/default/docker; stat -c %U:%G /etc/default/docker"
     local cur_state=""
-    local remediation="￭ /etc/default/docker 파일 소유자 및 소유 그룹 수정 1\) # chown root:root /etc/default/docker \(Debian 계열\) 2\) # chown root:root /etc/sysconfig/docker \(RedHat 계열\)"
+    local remediation="￭ /etc/default/docker 파일 소유자 및 소유 그룹 수정 1) # chown root:root /etc/default/docker (Debian 계열) 2) # chown root:root /etc/sysconfig/docker (RedHat 계열)"
 
     local vuln_found=false
     local checked_any=false
@@ -1386,7 +1128,7 @@ check_CSAP_Docker_24() {
     local detail=""
     local cmd="ls -l /etc/default/docker; stat -c %a /etc/default/docker"
     local cur_state=""
-    local remediation="￭ /etc/default/docker 파일 접근 권한 수정 1\) # chmod 644 /etc/default/docker \(Debian 계열\) 2\) # chmod 644 /etc/sysconfig/docker \(RedHat 계열\)"
+    local remediation="￭ /etc/default/docker 파일 접근 권한 수정 1) # chmod 644 /etc/default/docker (Debian 계열) 2) # chmod 644 /etc/sysconfig/docker (RedHat 계열)"
 
     local vuln_found=false
     local checked_any=false
@@ -1435,7 +1177,7 @@ check_CSAP_Docker_25() {
     local detail=""
     local cmd="docker ps --quiet --all | xargs docker inspect --format {{ .Id }}:"
     local cur_state=""
-    local remediation="￭ Dockerfile에 아래의 내용 추가 1\) RUN useradd –d /home/username –m s /bin/bash username USER username"
+    local remediation="￭ Dockerfile에 아래의 내용 추가 1) RUN useradd –d /home/username –m s /bin/bash username USER username"
 
     local output
     output=$({
@@ -1496,7 +1238,7 @@ check_CSAP_Docker_26() {
     local detail=""
     local cmd="echo \$DOCKER_CONTENT_TRUST"
     local cur_state=""
-    local remediation="￭ 사용하는 shell에 아래의 내용을 추가 1\) # export DOCKER_CONTENT_TRUST=1"
+    local remediation="￭ 사용하는 shell에 아래의 내용을 추가 1) # export DOCKER_CONTENT_TRUST=1"
 
     local output
     output=$({
@@ -1557,7 +1299,7 @@ check_CSAP_Docker_27() {
     local detail=""
     local cmd="ps -ef | grep docker | grep selinux-enabled; docker ps --quiet --all | xargs docker inspect --format {{ .Id }}:"
     local cur_state=""
-    local remediation="￭ SELinux 활성화 1\) /etc/default/docker 파일 내 DOCKER_OPTS=\"--selinux-enabled\" 설정 2\) /lib/systemd/system/docker.service 파일에 아래의 내용 수정 3\) docker 데몬 재시작 4\) --selinux-enabled 옵션 활성화 확인"
+    local remediation="￭ SELinux 활성화 1) /etc/default/docker 파일 내 DOCKER_OPTS=\"--selinux-enabled\" 설정 2) /lib/systemd/system/docker.service 파일에 아래의 내용 수정 3) docker 데몬 재시작 4) --selinux-enabled 옵션 활성화 확인"
 
     local output
     output=$({
@@ -1619,7 +1361,7 @@ check_CSAP_Docker_28() {
     local detail=""
     local cmd="docker ps -quiet; docker exec ps -el"
     local cur_state=""
-    local remediation="￭ 컨테이너에서 ssh를 제거하고 docker exec, docker attach 명령어 통해 컨테이너 접속 1\) # docker exec —interactive —tty \$INSTANCE_ID sh 2\) # docker attach \$INSTANCE_ID"
+    local remediation="￭ 컨테이너에서 ssh를 제거하고 docker exec, docker attach 명령어 통해 컨테이너 접속 1) # docker exec —interactive —tty \$INSTANCE_ID sh 2) # docker attach \$INSTANCE_ID"
 
     local output
     output=$({
@@ -1681,7 +1423,7 @@ check_CSAP_Docker_29() {
     local detail=""
     local cmd="docker ps -quiet -all; docker inspect | grep -A 50 NetworkSettings | grep Ports; docker ps -a"
     local cur_state=""
-    local remediation="￭ privileged가 아닌 포트로 매핑 1\) 컨테이너 시작 시, 컨테이너 포트를 호스트의 privileged 포트가 아닌 포트로 매핑 2\) Docker 파일에서 privileged 포트 매핑 선언을 호스팅하는 컨테이너가 없는지 확인"
+    local remediation="￭ privileged가 아닌 포트로 매핑 1) 컨테이너 시작 시, 컨테이너 포트를 호스트의 privileged 포트가 아닌 포트로 매핑 2) Docker 파일에서 privileged 포트 매핑 선언을 호스팅하는 컨테이너가 없는지 확인"
 
     local output
     output=$({
@@ -1744,7 +1486,7 @@ check_CSAP_Docker_30() {
     local detail=""
     local cmd="docker ps --quiet --all | xargs docker inspect --format {{ .Id }}:PidsLimit="
     local cur_state=""
-    local remediation="￭ 컨테이너 시작 시 —pids-limit 플래그를 사용 \(예시\) 1\) # docker run –it —pids-limit 100 <image_id>"
+    local remediation="￭ 컨테이너 시작 시 —pids-limit 플래그를 사용 (예시) 1) # docker run –it —pids-limit 100 <image_id>"
 
     local output
     output=$({
@@ -1805,7 +1547,7 @@ check_CSAP_Docker_31() {
     local detail=""
     local cmd="ifconfig | grep docker; docker network ls --quiet | xargs xargs docker network inspect --format"
     local cur_state=""
-    local remediation="￭ Default bridge docker\(\) 비활성화 1\) /etc/default/docker 파일 내 DOCKER_OPTS=\"--icc=false\" 설정 2\) /lib/systemd/system/docker.service 파일에 아래의 내용 수정 3\) docker 데몬 재시작 4\) # docker network inspect bridge 5\) 사용자 정의 네트워크 생성, 지정 \(예시\) / daemon.json 작성 시, \"icc=false\" 옵션 추가 # docker network create my-net 6\) 아래 명령어를 입력하여 docker\(\) 제거 확인 및 사용자 정의 네트워크 확인 # docker network ls"
+    local remediation="￭ Default bridge docker() 비활성화 1) /etc/default/docker 파일 내 DOCKER_OPTS=\"--icc=false\" 설정 2) /lib/systemd/system/docker.service 파일에 아래의 내용 수정 3) docker 데몬 재시작 4) # docker network inspect bridge 5) 사용자 정의 네트워크 생성, 지정 (예시) / daemon.json 작성 시, \"icc=false\" 옵션 추가 # docker network create my-net 6) 아래 명령어를 입력하여 docker() 제거 확인 및 사용자 정의 네트워크 확인 # docker network ls"
 
     local config_file="/etc/app/config"
     # Expand wildcards/find actual config
@@ -1823,7 +1565,7 @@ check_CSAP_Docker_31() {
         status="수동점검"
     fi
 
-    add_result "CSAP-Docker-31" "컨테이너 런타임" "도커의 default bridge docker\(\) 사용 제한" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
+    add_result "CSAP-Docker-31" "컨테이너 런타임" "도커의 default bridge docker() 사용 제한" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
 
 # CSAP-Docker-32: 호스트의 user namespaces 공유 제한
@@ -1832,7 +1574,7 @@ check_CSAP_Docker_32() {
     local detail=""
     local cmd="docker ps --quiet --all | xargs docker inspect --format {{ .Id }}"
     local cur_state=""
-    local remediation="￭ 호스트, 컨테이너 user namespaces 공유 제한 1\) # docker run --rm -it --userns=host ubuntu bash \(취약\) 2\) # docker run --rm -it ubuntu bash \(양호\)"
+    local remediation="￭ 호스트, 컨테이너 user namespaces 공유 제한 1) # docker run --rm -it --userns=host ubuntu bash (취약) 2) # docker run --rm -it ubuntu bash (양호)"
 
     local output
     output=$({

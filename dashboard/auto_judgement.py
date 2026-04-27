@@ -65,15 +65,30 @@ def _decide_node_process(result: dict) -> tuple[str, str] | None:
 
 def _decide_docker_group(result: dict) -> tuple[str, str] | None:
     current_state = _normalize_text(result.get("current_state"))
-    if not current_state.startswith("docker:"):
+    if not current_state:
         return None
-    parts = current_state.split(":", 3)
-    if len(parts) < 4:
+
+    group_lines = []
+    for line in current_state.splitlines():
+        parts = line.split(":", 3)
+        if len(parts) == 4 and parts[0] in {"docker", "dockerroot", "root"}:
+            group_lines.append(parts)
+
+    if not group_lines:
         return None
-    members = parts[3].strip()
-    if not members:
-        return _auto_decision("양호", "docker 그룹에 추가 사용자가 없습니다.", result.get("detail"))
-    return _auto_decision("취약", f"docker 그룹에 사용자({members})가 포함되어 있습니다.", result.get("detail"))
+
+    extra_members = sorted(
+        {
+            member.strip()
+            for parts in group_lines
+            for member in parts[3].split(",")
+            if member.strip() and member.strip() != "root"
+        }
+    )
+    if not extra_members:
+        return _auto_decision("양호", "docker/dockerroot/root 그룹에 root 이외 추가 사용자가 없습니다.", result.get("detail"))
+    members = ", ".join(extra_members)
+    return _auto_decision("취약", f"docker/dockerroot/root 그룹에 사용자({members})가 포함되어 있습니다.", result.get("detail"))
 
 
 def _decide_docker_bridge(result: dict) -> tuple[str, str] | None:
