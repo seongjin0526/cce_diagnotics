@@ -259,7 +259,7 @@ fi
 check_CSAP_Hadoop_01() {
     local status="양호"
     local detail=""
-    local cmd="./bin/hadoop fs -ls"
+    local cmd="./bin/hadoop fs -ls [파일명]"
     local cur_state=""
     local remediation="￭ 로컬 파일 시스템 (예시) // dfs.namenode.name.dir = hdfs:hadoop (700) 1) # chown –R hdfs:hadoop /home/hadoop/data/dfs/name 2) # chmod 700 /home/hadoop/data/dfs/name // dfs.namenode.data.dir = hdfs:hadoop (700) 3) # chown –R hdfs:hadoop /home/hadoop/data/dfs/data 4) # chmod 700 /home/hadoop/data/dfs/data // dfs.journalnode.edits.dir = hdfs:hadoop (700) 5) # chown –R hdfs:hadoop /home/hadoop/data/dfs/journalnode 6) # chmod 700 /home/hadoop/data/dfs/journalnode // \$HADOOP_LOG_DIR = hdfs:hadoop (775) 7) # chown –R hdfs:hadoop /home/hadoop/logs 8) # chmod 775 /home/hadoop/logs // yarn.nodemanager.local-dirs = yarn:hadoop (755) 10) # chown -R yarn:hadoop /home/hadoop/data/yarn/nm-local-dir 11) # chmod 755 /home/hadoop/data/yarn/nm-local-dir ￭ HDFS 디렉토리 1) / = hdfs:hadoop (775) 2) /home/hadoop/bin/hdfs dfs –chown hdfs:hadoop / 3) /home/hadoop/bin/hdfs dfs –chmod 755 / 4) /user = hdfs:hadoop (755) 5) /home/hadoop/bin/hdfs dfs –chown hdfs:hadoop /user 6) /home/hadoop/bin/hdfs dfs –chmod 755 /user"
 
@@ -317,7 +317,7 @@ check_CSAP_Hadoop_01() {
 check_CSAP_Hadoop_02() {
     local status="양호"
     local detail=""
-    local cmd="ls -al | grep *.keytab"
+    local cmd="ls -al [hadoop config 디렉토리] | grep *.keytab"
     local cur_state=""
     local remediation="￭ root 외의 소유자로 지정, 권한은 400 이하로 설정 (예시) # chown hdfs:hadoop hdfs.keytab # chmod 400 hdfs.keytab # chown yarn:hadoop yarn.keytab # chmod 400 yarn.keytab # chown mapred:hadoop mapred.keytab # chmod 400 mapred.keytab"
 

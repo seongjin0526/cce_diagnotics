@@ -335,15 +335,15 @@ check_CSAP_MS_SQL_05() {
 check_CSAP_MS_SQL_06() {
     local status="양호"
     local detail=""
-    local cmd="SELECT name, value FROM sys.configurations WHERE name = xp_cmdshell;; EXEC sp_configure xp_cmdshell; SELECT * FROM sys.configurations WHERE name = allow updates;"
+    local cmd="SELECT name, value FROM sys.configurations WHERE name = 'xp_cmdshell';; EXEC sp_configure 'xp_cmdshell' 쿼리 실행; SELECT * FROM sys.configurations WHERE name = 'allow updates';"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ 새 쿼리를 통해 프로시저 확인 1) SQL Server Management Studio → 새쿼리 2) EXEC sp_configure 'xp_cmdshell', 0; ￭ 개체 탐색기를 통해 프로시저 확인 1) SQL Server Management Studio → 개체 탐색기 → 컴퓨터 이름 → 오른쪽 마우스 → 패싯 → 일반 2) XPCmdShellEnabled 값 false 설정 [주요기반시설 가이드] xp_cmdshell 설정 값을 0 또는 False로 설정 [상세 조치 사례] l MSSQL [ xp_cmdshell 사용이 불필요한 경우ㅣ Step 1) SQL Server Management Studio > 개체 탐색기 > 컴퓨터 이름 우클릭 > 패싯 > 일반 Step 2) XPCmdShellEnabled 값 확인 2.1) Microsoft SQL Server Management Studio에서 확인 [ 개체 탐색기를 통한 프로시저 확인 ] 2.2) 퀴리문으로 확인 SELECT name, value FROM sys.configurations WHERE name = 'xp_cmdshell'; ※ value가 1이면 활성화, 0이면 비활성화 되어 있는 상태 Step 3) XPCmdShellEnabled 값을 false로 설정 3.1) Microsoft SQL Server Management Studio에서 설정 SQL Server Management Studio > 개체 탐색기 > 컴퓨터 이름 우클릭 > 패싯 > 일반 3.2) 퀴리문으로 설정 EXEC sp_configure 'show advanced options', 1; GO RECONFIGURE; GO EXEC sp_configure 'xp_cmdshell', 1; GO RECONFIGURE GO [ xp_cmdshell 사용이 필요한 경우ㅣ Step 1) xp_cmdshell의 public 실행 권한 제거 1.1) Microsoft SQL Server Management Studio에서 제거 SQL Server Management Studio > 개체 탐색기 > [컴퓨터 이름] > 데이터베이스 > 시스템 데이터베이스 > master > 프로그래밍 기능 > 확장 저장 프로시저 > 시스템 확장 저장 프로시저 > sys.xp_cmdshell > 마우스 우클릭 > 속성 > 사용권한에서 public에 대한 사용권한에 '실행' 권한 제거 08. DBMS 1.2) 퀴리문으로 public에 대한 실행 권한 제거 REVOKE EXECUTE ON master.dbo.xp_cmdshell TO public Step 1) 서비스 계정(애플리케이션 연동 등)의 sysadmin 권한 제거 2.1) Microsoft SQL Server Management Studio에서 제거 SQL Server Management Studio > 개체 탐색기 > [컴퓨터 이름] > 보안 > 로그인 > [각 계정 선택] > 마우스 우클릭 > 속성 > 서버 역할에서 sysadmin 권한 제거 2.2) 퀴리문으로 서비스 계정의 sysadmin 권한 제거 - sysadmin 권한이 부여된 계정 확인 EXEC sp_helpsrvrolemember 'sysadmin' - sysadmin 권한이 부여된 계정에 대해 권한 제거 EXEC master..sp_dropsrvrolemember @loginame = N'<계정명>', @rolename = N'sysadmin' ※ 08. DBMS 661"
 
     local output
     output=$({
-        ( run_mssql_query "SELECT name, value FROM sys.configurations WHERE name = xp_cmdshell;" )
-        ( run_mssql_query "EXEC sp_configure xp_cmdshell" )
-        ( run_mssql_query "SELECT * FROM sys.configurations WHERE name = allow updates;" )
+        ( run_mssql_query "SELECT name, value FROM sys.configurations WHERE name = 'xp_cmdshell';" )
+        ( run_mssql_query "EXEC sp_configure 'xp_cmdshell'" )
+        ( run_mssql_query "SELECT * FROM sys.configurations WHERE name = 'allow updates';" )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
 
@@ -398,51 +398,13 @@ check_CSAP_MS_SQL_06() {
 check_CSAP_MS_SQL_01() {
     local status="양호"
     local detail=""
-    local cmd="SELECT log.name AS"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="￭ 새 쿼리를 통해 불필요한 계정 삭제 1) SQL Server Management Studio → 새 쿼리 2) DROP login \"로그인 사용자 계정명\" ￭ 개체 탐색기를 통해 불필요한 계정 삭제 1) SQL Server Management Studio → 개체 탐색기 → 보안 → 로그인 2) 해당 계정 오른쪽 마우스 → 삭제 → 확인"
 
-    local output
-    output=$({
-        ( run_mssql_query "SELECT log.name AS" )
-    } 2>/dev/null | sed '/^$/d' | head -20)
-    cur_state="$output"
-
-    if [ -z "$output" ]; then
-        status="N/A"
-        detail="명령 실행 결과 없음 또는 대상 미설치. "
-    else
-        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="해당 파일이 없으므로 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
-            local missing_text
-            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
-            status="수동점검"
-            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
-        else
-        status="수동점검"
-        detail="명령 결과는 수집했지만 운영 정책/최신 기준 대조가 필요합니다. "
-        fi
-    fi
-    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
+    status="수동점검"
+    detail="수동 점검 필요 항목입니다. 불필요한 계정이 존재하지 않는 경우"
+    cur_state="수동점검 필요"
 
     add_result "CSAP-MS-SQL-01" "패치 및 로그 관리" "불필요한 계정 제거" "-" "$status" "$detail" "클라우드" "$cmd" "$cur_state" "$remediation"
 }
@@ -451,13 +413,13 @@ check_CSAP_MS_SQL_01() {
 check_CSAP_MS_SQL_02() {
     local status="양호"
     local detail=""
-    local cmd="EXEC sp_helpsrvrolemember sysadmin"
+    local cmd="EXEC sp_helpsrvrolemember 'sysadmin'"
     local cur_state=""
     local remediation="￭ 새 쿼리를 통해 역할 제거 1) SQL Server Management Studio → 새 쿼리 2) EXEC sp_droprolemember '<구성원 이름>', 'sysadmin' ￭ 개체 탐색기를 통해 역할 제거 1) SQL Server Management Studio → 개체 탐색기 → 보안 → 로그인 2) 계정별 오른쪽 마우스 → 속성 → 서버 역할에서 sysadmin 권한 해제"
 
     local output
     output=$({
-        ( run_mssql_query "EXEC sp_helpsrvrolemember sysadmin" )
+        ( run_mssql_query "EXEC sp_helpsrvrolemember 'sysadmin'" )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
 
@@ -617,12 +579,12 @@ check_ISMS_D_01() {
 check_ISMS_D_02() {
     local status="양호"
     local detail=""
-    local cmd="EXEC sp_droplogin ' ';"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="계정별 용도를 파악한 후 불필요한 계정 삭제 [상세 조치 사례] l MSSQL Step 1) 불필요한 계정 삭제 EXEC sp_droplogin '삭제할 계정';"
 
     status="수동점검"
-    detail="계정 정보를 확인하여 불필요한 계정이 없는 경우"
+    detail="수동 점검 필요 항목입니다. 계정 정보를 확인하여 불필요한 계정이 없는 경우"
     cur_state="수동점검 필요"
 
     add_result "ISMS-D-02" "DBMS > 1. 계정 관리" "데이터베이스의 불필요 계정을 제거하거나, 잠금설정 후 사용" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
@@ -662,12 +624,12 @@ check_ISMS_D_04() {
 check_ISMS_D_06() {
     local status="양호"
     local detail=""
-    local cmd="EXEC sp_droplogin ' ';; EXEC sp_adduser ' ', ' ', 'db_owner';; EXEC sp_adduser ' ', ' ', ' ';"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="사용자별 계정 생성 및 권한 부여 [상세 조치 사례] l MSSQL Step 1) 공용계정 삭제 EXEC sp_droplogin '공용 계정'; 08. DBMS Step 2) 사용자별, 응용 프로그램별 계정 생성 CREATE LOGIN '생성 계정' WITH PASSWORD = '비밀번호'; CREATE USER '생성 계정' FOR LOGIN '생성 계정' WITH DEFAULT_SCHEMA ='생성 계정'; ALTER USER '생성 계정'; EXEC sp_adduser '생성 계정', '생성 계정', 'db_owner'; EXEC sp_adduser '생성 계정', '생성 계정', '생성 계정'; EXEC sp_grantdbaccess '생성 계정', '생성 계정';"
 
     status="수동점검"
-    detail="사용자별 계정을 사용하고 있는 경우"
+    detail="수동 점검 필요 항목입니다. 사용자별 계정을 사용하고 있는 경우"
     cur_state="수동점검 필요"
 
     add_result "ISMS-D-06" "DBMS > 1. 계정 관리" "DB 사용자 계정을 개별적으로 부여하여 사용" "중" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
@@ -677,14 +639,13 @@ check_ISMS_D_06() {
 check_ISMS_D_08() {
     local status="양호"
     local detail=""
-    local cmd="select name, password_hash from sys.sql_logins;; USE"
+    local cmd="select name, password_hash from sys.sql_logins;"
     local cur_state=""
     local remediation="SHA-256 이상의 암호화 알고리즘 적용 [상세 조치 사례] l MSSQL Step 1) 저장된 비밀번호 해시 값 확인 select name, password_hash from sys.sql_logins; ※ MSSQL 2012이상에서 사용자 계정의 비밀번호는 32bit Salt를 적용한 SHA-512 해시 알고리즘을 사용 [ 일반 이용자 패스워드 해시 알고리즘 변경 ] Step 1) 데이터베이스 접속 USE <데이터베이스명> GO Step 1) 열 추가 ALTER TABLE <테이블명> ADD <신규 해시 칼럼명> varbinary(256) GO Step 2) 새로운 열에 암호화 된 데이터 저장 UPDATE <테이블명> SET <신규 해시 칼럼명> = HASHBYTES('SHA2_256', <기존 해시 칼럼명>) GO Step 3) 기존 열 제거 ALTER TABLE <테이블명> DROP COLUMN <기존 해시 칼럼명> GO"
 
     local output
     output=$({
         ( run_mssql_query "select name, password_hash from sys.sql_logins;" )
-        ( USE )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
 
@@ -769,7 +730,7 @@ check_ISMS_D_16() {
 check_ISMS_D_25() {
     local status="양호"
     local detail=""
-    local cmd="SELECT @@version; SELECT SERVERPROPERTY(productversion) AS ProductVersion, SERVERPROPERTY(productlev"
+    local cmd="SELECT @@version; SELECT SERVERPROPERTY('productversion') AS ProductVersion, SERVERPROPERTY('productlev"
     local cur_state=""
     local remediation="보안 패치가 적용된 버전으로 업데이트 [상세 조치 사례] l MSSQL Step 1) 시스템에서 제품 버전 현황 확인 SELECT @@version 또는 SELECT SERVERPROPERTY('productversion') AS ProductVersion, SERVERPROPERTY('productlev el') AS ProductLevel, SERVERPROPERTY('edition') AS Edition; Step 2) MSSQL 최신 버전 확인 http://support.microsoft.com/kb/321185/en-uswnloads/index.html 664"
 

@@ -285,7 +285,7 @@ fi
 check_CSAP_Apache_01() {
     local status="양호"
     local detail=""
-    local cmd="cfg=\${APACHE_CONF:-/usr/local/apache2/conf/httpd.conf}; if [ -f \"\$cfg\" ]; then out=\$(grep -Ein \"^[[:space:]]*DocumentRoot|^[[:space:]]*Alias[[:space:]]+/\" \"\$cfg\" 2>/dev/null | head -20); printf '%s\\n' \"\$out\"; else echo \"FILE_DEFAULT_BAD|기본 DocumentRoot 경로를 별도 분리 여부를 확인할 수 없습니다.\"; fi"
+    local cmd="cat [Apache 환경 설정 파일] | grep DocumentRoot"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ 기본 디렉터리 변경 1) DocumentRoot를 별도의 경로로 변경 # vi [Apache 환경 설정 파일] [주요기반시설 가이드] 웹 서버의 경로를 별도의 경로로 변경 및 불필요한 경로 제거 설정 [상세 조치 사례] l Apache Step 1) apache2.conf (또는 /conf/httpd.conf) 파일 내 DocumentRoot를 별도의 경로로 변경 DocumentRoot [별도의 경로]"
 
@@ -346,7 +346,7 @@ check_CSAP_Apache_01() {
 check_CSAP_Apache_02() {
     local status="양호"
     local detail=""
-    local cmd="find . -name manual"
+    local cmd="cd [Apache 설치 디렉터리]; find . -name manual 명령어"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ 매뉴얼 디렉터리 삭제 1) # rm –rf [Apache2 설치 디렉터리/manual] 2) Apache 설정 파일에 매뉴얼에 관한 설정이 존재할 경우 삭제 또는 주석처리 3) # vi [Apahce 설정 파일] [주요기반시설 가이드] 불필요한 파일 및 디렉터리를 제거하도록 설정 [상세 조치 사례] l Apache Step 1) rm 명령어로 확인된 불필요한 매뉴얼 디렉터리 및 파일 제거 # rm –rf /<Apache 설치 디렉터리>/htdocs/manual # rm –rf /<Apache 설치 디렉터리>/manual ※ 2.4 버전 이상은 htdocs 디렉터리가 기본 제공되지 않으므로 /var/www/html 사용"
 
@@ -374,7 +374,7 @@ check_CSAP_Apache_02() {
 check_CSAP_Apache_03() {
     local status="양호"
     local detail=""
-    local cmd="cat /etc/apache2/apache2.conf | grep FollowSymLinks"
+    local cmd="cat /etc/apache2/apache2.conf | grep FollowSymLinks; cat [Apahce Alias 설정 파일] | grep Alias"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ 심볼릭 링크 사용 제한 1) 환경 설정 파일 내에 FollowSymLinks Options 중 Indexes 제거 ￭ Alias 사용 제한 1) Alias 환경 설정 파일 내에 Alias 사용 제한 (주석처리) [주요기반시설 가이드] 웹 서비스 링크 사용 제한 설정 [상세 조치 사례] l Apache Step 1) apache.conf(또는 /conf/httpd.conf) 파일 내 Options 지시자 FollowSymLinks 옵션 제거 <Directory /> Options –FollowSymLinks #Options Indexes FollowSymLinks </Directory> 306"
 
@@ -541,167 +541,59 @@ check_CSAP_Apache_05() {
 check_CSAP_Apache_06() {
     local status="양호"
     local detail=""
-    local cmd="ps -ef | grep apache2; chown -R www-data:www-data /etc/apache2/; chown -R www-data:www-data /var/www/"
+    local cmd="ps -ef | grep apache2"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ apache 데몬 user/group 변경 (예시) 1) # vi [Apache 설정 디렉터리]/envvars 2) APACHE_RUN_USER, APACHE_RUN_GROUP을 별도의 계정으로 변경 3) 웹 프로세스 구동 사용자 계정을 변경했을 경우, 로그인이 되지 않도록 계정에 nologin 설정 # vi /etc/passwd [주요기반시설 가이드] 웹 서비스 프로세스 구동 시 관리자 권한이 아닌 운영에 필요한 최소한의 권한을 가진 계정으로 구동 설정 [상세 조치 사례] l Apache Step 1) envvars 파일 내 실행 계정을 관리자 계정이 아닌 별도의 계정으로 변경 # vi /[Apache 설치 디렉터리]/envvars export APACHE_RUN_USER=www-data export APACHE_RUN_GROUP=www-data Step 2) Apache 서비스 파일 소유권 변경 # chown -R www-data:www-data /etc/apache2/ # chown -R www-data:www-data /var/www/ # chown -R www-data:www-data /var/log/apache2/ Step 3) 웹 서비스 실행 계정 로그인 제한 설정 # usermod -s /sbin/nologin [사용자명] Step 4) Apache 재구동 # systemctl restart apache2 또는 httpd"
 
-    local vuln_found=false
-    local checked_any=false
-    local missing_only=true
-    local target_spec_1
-    target_spec_1=/etc/apache2/
-    local resolved_target_1
-    resolved_target_1="$target_spec_1"
-    if [ -n "$resolved_target_1" ]; then
-        for target_path in $resolved_target_1; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_1
-                result_1=$(check_file_owner_perm "$target_path" "-r" "644")
-                cur_state+="$target_path: $result_1; "
-                case "$result_1" in
-                    VULN*) vuln_found=true; detail+="$target_path 소유자/권한 부적절($result_1). " ;;
-                    GOOD*) detail+="$target_path 소유자/권한 적절($result_1). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
+    local output
+    output=$({
+        ( get_process_snapshot "apache2" )
+    } 2>/dev/null | sed '/^$/d' | head -20)
+    cur_state="$output"
+
+    if [ -z "$output" ]; then
+        status="양호"
+        detail="웹 프로세스(웹 서비스)가 관리자 권한이 부여된 계정이 아닌 운영에 필요한 최소한의 권한을 가진"
+    else
+        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="해당 파일이 없으므로 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
+            local missing_text
+            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
+            status="수동점검"
+            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
+        else
+        if printf '%s\n' "$output" | awk 'NR == 1 && $1 == "UID" {next} $1 == "root" {found=1} END {exit found ? 0 : 1}'; then
+            status="취약"
+            detail="웹 프로세스(웹 서비스)가 관리자 권한이 부여된 계정으로 구동되고 있는 경우"
+        elif printf '%s\n' "$output" | grep -Eiq "production|node_env|environment=production|user[[:space:]]*=[[:space:]]*[a-z0-9_-]+"; then
+            status="양호"
+            detail="웹 프로세스(웹 서비스)가 관리자 권한이 부여된 계정이 아닌 운영에 필요한 최소한의 권한을 가진"
+        else
+            status="양호"
+            detail="웹 프로세스(웹 서비스)가 관리자 권한이 부여된 계정이 아닌 운영에 필요한 최소한의 권한을 가진"
+        fi
+        fi
     fi
-    local target_spec_2
-    target_spec_2=/var/www/
-    local resolved_target_2
-    resolved_target_2="$target_spec_2"
-    if [ -n "$resolved_target_2" ]; then
-        for target_path in $resolved_target_2; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_2
-                result_2=$(check_file_owner_perm "$target_path" "-r" "644")
-                cur_state+="$target_path: $result_2; "
-                case "$result_2" in
-                    VULN*) vuln_found=true; detail+="$target_path 소유자/권한 부적절($result_2). " ;;
-                    GOOD*) detail+="$target_path 소유자/권한 적절($result_2). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_3
-    target_spec_3=/var/log/apache2/
-    local resolved_target_3
-    resolved_target_3="$target_spec_3"
-    if [ -n "$resolved_target_3" ]; then
-        for target_path in $resolved_target_3; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_3
-                result_3=$(check_file_owner_perm "$target_path" "-r" "644")
-                cur_state+="$target_path: $result_3; "
-                case "$result_3" in
-                    VULN*) vuln_found=true; detail+="$target_path 소유자/권한 부적절($result_3). " ;;
-                    GOOD*) detail+="$target_path 소유자/권한 적절($result_3). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_4
-    target_spec_4=/envvars
-    local resolved_target_4
-    resolved_target_4="$target_spec_4"
-    if [ -n "$resolved_target_4" ]; then
-        for target_path in $resolved_target_4; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_4
-                result_4=$(check_file_owner_perm "$target_path" "-r" "644")
-                cur_state+="$target_path: $result_4; "
-                case "$result_4" in
-                    VULN*) vuln_found=true; detail+="$target_path 소유자/권한 부적절($result_4). " ;;
-                    GOOD*) detail+="$target_path 소유자/권한 적절($result_4). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_5
-    target_spec_5=/sbin/nologin
-    local resolved_target_5
-    resolved_target_5="$target_spec_5"
-    if [ -n "$resolved_target_5" ]; then
-        for target_path in $resolved_target_5; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_5
-                result_5=$(check_file_owner_perm "$target_path" "-r" "644")
-                cur_state+="$target_path: $result_5; "
-                case "$result_5" in
-                    VULN*) vuln_found=true; detail+="$target_path 소유자/권한 부적절($result_5). " ;;
-                    GOOD*) detail+="$target_path 소유자/권한 적절($result_5). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_6
-    target_spec_6=${APACHE_CONF:-/etc/apache2/apache2.conf}
-    local resolved_target_6
-    resolved_target_6="$target_spec_6"
-    if [ -n "$resolved_target_6" ]; then
-        for target_path in $resolved_target_6; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_6
-                result_6=$(check_file_owner_perm "$target_path" "-r" "644")
-                cur_state+="$target_path: $result_6; "
-                case "$result_6" in
-                    VULN*) vuln_found=true; detail+="$target_path 소유자/권한 부적절($result_6). " ;;
-                    GOOD*) detail+="$target_path 소유자/권한 적절($result_6). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    if [ "$vuln_found" = "true" ]; then
-        status="취약"
-    elif [ "$checked_any" = "false" ]; then
-        status="수동점검"
-        detail="점검 대상 파일 경로를 자동으로 해석하지 못했습니다. "
-        cur_state="경로 자동 해석 실패"
-    elif [ "$missing_only" = "true" ]; then
-        status="N/A"
-    fi
-    [ -z "$detail" ] && detail="웹 프로세스(웹 서비스)가 관리자 권한이 부여된 계정이 아닌 운영에 필요한 최소한의 권한을 가진" && cur_state="점검 대상 파일 없음"
+    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
 
     add_result "CSAP-Apache-06 / ISMS-WEB-09" "접근 관리" "웹 프로세스 권한 제한" "상" "$status" "$detail" "통합" "$cmd" "$cur_state" "$remediation"
 }
@@ -824,59 +716,13 @@ check_ISMS_WEB_05() {
 check_ISMS_WEB_06() {
     local status="양호"
     local detail=""
-    local cmd="htpasswd //.htpasswd"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="상위 디렉터리 접근 기능 제거 설정 [상세 조치 사례] l Apache Step 1) AllowOverride 지시자 Authconfig 옵션 설정 확인 # vi /<Apache 설치 디렉터리>/httpd.conf(또는 apache.conf) <Directory \"/usr/local/apache2/htdocs\"> AllowOverride None </Directory> Step 2) AllowOverride 지시자 AuthConfig 옵션 설정 # vi /<Apache 설치 디렉터리>/httpd.conf(또는 apache.conf) <Directory \"/usr/local/apache2/htdocs\"> AllowOverride AuthConfig </Directory> 03. 웹 서비스 Step 3) 사용자 인증을 설정할 디렉터리에 .htaccess 파일 생성 AuthName \"디렉터리 사용자 인증\" AuthType Basic AuthUserFile /usr/local/apache/test/.auth Require valid-user 지시자 설명 AuthName 인증 영역(웹 브라우저의 인증 창에 표시되는 문구) AuthType 인증 형태(Basic 또는, Digest) AuthUserFile 사용자 정보(아이디 및 비밀번호) 저장 파일 위치 AuthGroupFile 그룹 파일의 위치(옵션) Require 접근을 허용할 사용자 또는, 그룹 정의 Step 4) 사용자 인증에 사용할 아이디 및 비밀번호 생성 # htpasswd /<Apache 설치 디렉터리>/.htpasswd [사용자명] New password: <비밀번호 입력> Re-type new password: <비밀번호 재입력> Adding password for user <사용자명> Step 5) Apache 재구동 # systemctl restart apache2"
 
-    local output
-    output=$({
-        ( htpasswd //.htpasswd )
-    } 2>/dev/null | sed '/^$/d' | head -20)
-    cur_state="$output"
-
-    if [ -z "$output" ]; then
-        status="양호"
-        detail="상위 디렉터리 접근 기능을 제거한 경우"
-    else
-        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="해당 파일이 없으므로 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
-            local missing_text
-            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
-            status="수동점검"
-            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
-        else
-        if output_has_negative_marker "$output"; then
-            status="양호"
-            detail="상위 디렉터리 접근 기능을 제거한 경우"
-        elif output_has_positive_marker "$output"; then
-            status="취약"
-            detail="상위 디렉터리 접근 기능을 제거하지 않은 경우"
-        else
-            status="취약"
-            detail="상위 디렉터리 접근 기능을 제거하지 않은 경우"
-        fi
-        fi
-    fi
-    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
+    status="수동점검"
+    detail="수동 점검 필요 항목입니다. 상위 디렉터리 접근 기능을 제거한 경우"
+    cur_state="수동점검 필요"
 
     add_result "ISMS-WEB-06" "웹 서비스 > 2. 서비스 관리" "웹 서비스 상위 디렉터리 접근 제한 설정" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
@@ -938,47 +784,13 @@ check_ISMS_WEB_10() {
 check_ISMS_WEB_14() {
     local status="양호"
     local detail=""
-    local cmd="chown -R ]: apache2.conf; chmod -R 750 apache2.conf"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="주요 설정 파일 및 디렉터리에 불필요한 접근 권한 제거 설정 [상세 조치 사례] l Apache Step 1) 루트 디렉터리 내 불필요한 권한 삭제 또는 적절한 권한 부여 # chown –R <Apache 계정>]:<Apache 그룹> apache2.conf (또는 httpd.conf) # chmod -R 750 apache2.conf (또는 httpd.conf)"
 
-    local vuln_found=false
-    local checked_any=false
-    local missing_only=true
-    local target_spec_1
-    target_spec_1=${APACHE_CONF:-/etc/apache2/apache2.conf}
-    local resolved_target_1
-    resolved_target_1="$target_spec_1"
-    if [ -n "$resolved_target_1" ]; then
-        for target_path in $resolved_target_1; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_1
-                result_1=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_1; "
-                case "$result_1" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_1). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_1). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    if [ "$vuln_found" = "true" ]; then
-        status="취약"
-    elif [ "$checked_any" = "false" ]; then
-        status="수동점검"
-        detail="점검 대상 파일 경로를 자동으로 해석하지 못했습니다. "
-        cur_state="경로 자동 해석 실패"
-    elif [ "$missing_only" = "true" ]; then
-        status="N/A"
-    fi
-    [ -z "$detail" ] && detail="주요 설정 파일 및 디렉터리에 불필요한 접근 권한이 부여되지 않은 경우" && cur_state="점검 대상 파일 없음"
+    status="수동점검"
+    detail="수동 점검 필요 항목입니다. 주요 설정 파일 및 디렉터리에 불필요한 접근 권한이 부여되지 않은 경우"
+    cur_state="수동점검 필요"
 
     add_result "ISMS-WEB-14" "웹 서비스 > 2. 서비스 관리" "웹 서비스 경로 내 파일의 접근 통제" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
@@ -1109,7 +921,7 @@ check_ISMS_WEB_17() {
 check_ISMS_WEB_18() {
     local status="양호"
     local detail=""
-    local cmd="cat //conf/httpd.conf"
+    local cmd="cat /[Apache_Dir]/conf/httpd.conf(또는 apache2.conf)"
     local cur_state=""
     local remediation="WebDAV 서비스 비활성화 설정 [상세 조치 사례] l Apache Step 1) httpd.conf 파일 내 모든 디렉터리에서 WebDAV 설정 확인 # cat /[Apache_Dir]/conf/httpd.conf(또는 apache2.conf) Dav On Step 2) 모든 디렉터리에서 WebDAV 설정 비활성화 또는 주석 처리 # vi /[Apache_Dir]/conf/httpd.conf(또는 apache2.conf) <Directory \"/path/to/directory\"> Dav Off </Directory> Step 3) Apache 재구동 # systemctl restart apache2 03. 웹 서비스 323"
 
@@ -1244,14 +1056,13 @@ check_ISMS_WEB_19() {
 check_ISMS_WEB_20() {
     local status="양호"
     local detail=""
-    local cmd="apache2ctl -M | grep ssl; a2ensite default-ssl"
+    local cmd="apache2ctl -M | grep ssl"
     local cur_state=""
     local remediation="웹 서비스 내 SSL/TLS 활성화 설정 [상세 조치 사례] l Apache Step 1) SSL 모듈 활성화 확인 # apache2ctl –M | grep ssl ssl_module (shared) Step 2) SSL 가상 호스트 설정에 SSL 인증서 설정 추가 # vi /[Apache 설치 디렉터리]/sites-available/default-ssl.conf <VirtualHost *:443> ServerAdmin webmaster@yourdomain.com ServerName yourdomain.com DocumentRoot /var/www/html SSLEngine on SSLCertificateFile /path/to/your_domain_name.crt SSLCertificateKeyFile /path/to/your_domain_name.key ErrorLog \${APACHE_LOG_DIR}/error.log CustomLog \${APACHE_LOG_DIR}/access.log combined </VirtualHost> Step 3) SSL 가상 호스트 활성화 # a2ensite default-ssl Step 4) Apache 재구동 # systemctl restart apache2"
 
     local output
     output=$({
         ( get_process_snapshot "ssl" )
-        ( a2ensite default-ssl )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
 
@@ -1306,14 +1117,13 @@ check_ISMS_WEB_20() {
 check_ISMS_WEB_21() {
     local status="양호"
     local detail=""
-    local cmd="apache2ctl -M | grep ssl; apt install mod_ssl"
+    local cmd="apache2ctl -M | grep ssl"
     local cur_state=""
     local remediation="HTTP Redirection 활성화 설정 [상세 조치 사례] l Apache Step 1) SSL 모듈 활성화 확인 # apache2ctl -M | grep ssl Step 1) SSL 인증서 활성화 설정 Step 2) (미설치 시) mod_rewrite 설치 # apt install mod_ssl Step 3) HTTP Redirection 설정 확인 # vi /[Apache 설치 디렉터리]/sites-available/default-ssl.conf <VirtualHost *:80> ServerName example.com Redirect permanent / https://example.com/ </VirtualHost> 03. 웹 서비스 Step 4) SSL 가상 호스트 설정 # vi /[Apache 설치 디렉터리]/sites-available/default-ssl.conf <VirtualHost *:80> ServerAdmin webmaster@yourdomain.com ServerName yourdomain.com DocumentRoot /var/www/html RewriteEngine On RewriteCond %{HTTPS} off RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301] ErrorLog \${APACHE_LOG_DIR}/error.log CustomLog \${APACHE_LOG_DIR}/access.log combined </VirtualHost> Step 5) SSL 가상 호스트 활성화 및 Apache 재구동 # vi sudo a2ensite default-ssl # systemctl restart apache2"
 
     local output
     output=$({
         ( get_process_snapshot "ssl" )
-        ( apt install mod_ssl )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
 
@@ -1429,7 +1239,7 @@ check_ISMS_WEB_22() {
 check_ISMS_WEB_24() {
     local status="양호"
     local detail=""
-    local cmd="mkdir; mkdir /var/www/html/uploads; ls -al /"
+    local cmd="ls -al /[Apache 업로드 디렉터리]"
     local cur_state=""
     local remediation="기본 경로가 아닌 별도의 업로드 경로를 지정하고, 해당 경로에 대한 일반 사용자의 접근 권한을 제한하도록 설정 [상세 조치 사례] l Apache Step 1) apache2.conf 파일 내 업로드 경로 및 웹서비스 디렉터리 경로 확인 # vi /[Apache 설치 디렉터리]/apache2/apache2.conf(또는 apache2.conf) <Directory /var/www/html/uploads> Options None AllowOverride None Require all denied </Directory> Step 2) 별도 업로드 경로 생성 # mkdir [웹서비스 디렉터리 외 경로] # mkdir /var/www/html/uploads Step 3) 파일 실행 권한 확인 # ls -al /[Apache 업로드 디렉터리] Step 4) 업로드 디렉터리 권한 설정 # chmod 750 /var/www/html/uploads/ # chown www-data:www-data /var/www/html/uploads/ Step 5) apache2.conf 파일 내 업로드 디렉터리 접근제한 설정 # vi /[Apache 설치 디렉터리]/apache2/apache2.conf <Directory \"/var/www/html/uploads/\"> Require all denied </Directory>"
 
@@ -1437,7 +1247,7 @@ check_ISMS_WEB_24() {
     local checked_any=false
     local missing_only=true
     local target_spec_1
-    target_spec_1=/var/www/html/uploads
+    target_spec_1=/apache2/apache2.conf
     local resolved_target_1
     resolved_target_1="$target_spec_1"
     if [ -n "$resolved_target_1" ]; then
@@ -1461,7 +1271,7 @@ check_ISMS_WEB_24() {
         done
     fi
     local target_spec_2
-    target_spec_2=/var/www/html/uploads/
+    target_spec_2=/var/www/html/uploads
     local resolved_target_2
     resolved_target_2="$target_spec_2"
     if [ -n "$resolved_target_2" ]; then
@@ -1485,7 +1295,7 @@ check_ISMS_WEB_24() {
         done
     fi
     local target_spec_3
-    target_spec_3=/apache2/apache2.conf
+    target_spec_3=/Directory
     local resolved_target_3
     resolved_target_3="$target_spec_3"
     if [ -n "$resolved_target_3" ]; then
@@ -1509,7 +1319,7 @@ check_ISMS_WEB_24() {
         done
     fi
     local target_spec_4
-    target_spec_4=/Directory
+    target_spec_4=/var/www/html/uploads/
     local resolved_target_4
     resolved_target_4="$target_spec_4"
     if [ -n "$resolved_target_4" ]; then
@@ -1550,7 +1360,7 @@ check_ISMS_WEB_24() {
 check_ISMS_WEB_25() {
     local status="양호"
     local detail=""
-    local cmd="//httpd -v"
+    local cmd="/[Apache 설치 디렉터리]/httpd -v"
     local cur_state=""
     local remediation="패치 적용에 따른 서비스 영향 정도를 정확히 파악하여 주기적인 패치 적용 정책 수립 및 적용하도록 설정 [상세 조치 사례] l Apache Step 1) 웹 서버 버전과 최신 패치 버전을 비교하여 확인 # /[Apache 설치 디렉터리]/httpd –v [ Apache 웹 서버 버전 확인 ] Step 2) Apache 사이트를 통해 주기적으로 버전 점검을 하며, 최신 버전 적용 시 충분한 테스트 후 적용 권고 ※ 참고 사이트: http://httpd.apache.org/download.cgi 348"
 
@@ -1612,71 +1422,13 @@ check_ISMS_WEB_25() {
 check_ISMS_WEB_26() {
     local status="양호"
     local detail=""
-    local cmd="ls -al; chmod o-rwx /"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="로그 디렉터리 및 파일에 일반 사용자 접근 권한 제거 설정 [상세 조치 사례] l Apache Step 1) 로그 디렉터리 및 파일 권한 확인 # ls –al <Aapche 로그 디렉터리> Step 2) 로그 디렉터리 및 파일의 불필요 권한 삭제 # chmod o-rwx /<Apache 로그 파일>"
 
-    local vuln_found=false
-    local checked_any=false
-    local missing_only=true
-    local target_spec_1
-    target_spec_1=/var/log/apache2
-    local resolved_target_1
-    resolved_target_1="$target_spec_1"
-    if [ -n "$resolved_target_1" ]; then
-        for target_path in $resolved_target_1; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_1
-                result_1=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_1; "
-                case "$result_1" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_1). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_1). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_2
-    target_spec_2=/usr/local/apache2/logs
-    local resolved_target_2
-    resolved_target_2="$target_spec_2"
-    if [ -n "$resolved_target_2" ]; then
-        for target_path in $resolved_target_2; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_2
-                result_2=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_2; "
-                case "$result_2" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_2). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_2). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    if [ "$vuln_found" = "true" ]; then
-        status="취약"
-    elif [ "$checked_any" = "false" ]; then
-        status="수동점검"
-        detail="점검 대상 파일 경로를 자동으로 해석하지 못했습니다. "
-        cur_state="경로 자동 해석 실패"
-    elif [ "$missing_only" = "true" ]; then
-        status="N/A"
-    fi
-    [ -z "$detail" ] && detail="로그 디렉터리 및 파일에 일반 사용자의 접근 권한이 없는 경우" && cur_state="점검 대상 파일 없음"
+    status="수동점검"
+    detail="수동 점검 필요 항목입니다. 로그 디렉터리 및 파일에 일반 사용자의 접근 권한이 없는 경우"
+    cur_state="수동점검 필요"
 
     add_result "ISMS-WEB-26" "웹 서비스 > 4. 패치 및 로그 관리" "로그 디렉터리 및 파일 권한 설정" "중" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }

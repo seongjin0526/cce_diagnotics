@@ -260,7 +260,7 @@ fi
 check_CSAP_Tomcat_01() {
     local status="양호"
     local detail=""
-    local cmd="cat /tomcat-users.xml | grep <user username=; cat /tomcat-users.xml | grep roles="
+    local cmd="cat [Tomcat 설치 디렉터리]/tomcat-users.xml | grep \"<user username=\"; cat [Tomcat 설치 디렉터리]/tomcat-users.xml | grep \"roles=\""
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ default 계정명 변경 (admin tomcat 등) 1) # vi [Tomcat 설치 디렉터리]/tomcat-users.xml 2) default 계정명 변경 또는 3) 해당 계정 주석 처리 ￭ 관리자 페이지 비활성화 1) # [Tomcat 설치 디렉터리]/tomcat-users.xml 또는 2) 관리자 계정 주석 처리 ※ 관리자 페이지는 default로 비활성화되어 있음(주석 처리) [주요기반시설 가이드] 기본 관리자 계정명을 추측하기 어려운 계정명으로 설정 [상세 조치 사례] l Tomcat Step 1) 기본 계정명 변경 또는 관리자 페이지 비활성화(기본값: 비활성화) # vi <Tomcat 설치 디렉터리>/conf/server.xml 예시) <user username=\"admin\" password=\"XNDJxndn264!@\" roles=\"manager-gui\"/> Step 2) Tomcat 재구동 # systemctl restart tomcat ※ \"roles = manager-gui, manager-script, manager-jmx, manager-status\" 설정 시 관리자 계정 및 페이지 활성화 상태 03. 웹 서비스 275"
 
@@ -329,7 +329,7 @@ check_CSAP_Tomcat_01() {
 check_CSAP_Tomcat_02() {
     local status="양호"
     local detail=""
-    local cmd="cfg=\${CATALINA_HOME:-/usr/local/tomcat}/conf/tomcat-users.xml; if [ -f \"\$cfg\" ]; then out=\$(grep -Ein \"<user[^>]+password=|<role[^>]+manager\" \"\$cfg\" 2>/dev/null | head -20); printf '%s\\n' \"\$out\"; else echo \"FILE_DEFAULT_BAD|기본 관리자 계정 및 비밀번호 정책 적용 여부를 확인할 수 없습니다.\"; fi"
+    local cmd="[Tomcat 설치 디렉터리]/tomcat-users.xml | grep \"<user username=\""
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ 패스워드 변경 1) 패스워드 복잡도를 만족하도록 설정 # vi [Tomcat 설치 디렉터리]/tomcat-users.xml ※ 패스워드 복잡도 : 영문(대문자, 소문자), 숫자, 특수문자 조합 중 3가지 8자리 이상, 2가지 조합 10자리 이상 [주요기반시설 가이드] 복잡도 기준에 맞는 추측하기 어려운 비밀번호 설정 [상세 조치 사례] l Tomcat Step 1) 복잡도를 만족하는 비밀번호 설정 # vi <Tomcat 설치 디렉터리>/conf/server.xml <user username=\"admin\" password=\"XNDJxndn264!@\" roles=\"manager-gui\"/> Step 2) Tomcat 재시작 # systemctl restart tomcat"
 
@@ -390,7 +390,7 @@ check_CSAP_Tomcat_02() {
 check_CSAP_Tomcat_03() {
     local status="양호"
     local detail=""
-    local cmd="ls -l; chmod 600 //tomcat-users.xml"
+    local cmd="ls [Tomcat 설치 디렉터리 ] -l"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ 패스워드 파일 권한 변경 1) # chmod 600 [Tomcat 설치 디렉터리]/tomcat-users.xml ※ 설정 파일 권한 변경 시, 시스템 영향도를 파악하여 충분한 테스트를 진행 한 후에 접근권한 수정 [주요기반시설 가이드] 비밀번호 파일 권한 600 이하로 설정 [상세 조치 사례] l Tomcat Step 1) tomcat-users.xml 파일 권한 변경 # chmod 600 /<Tomcat 설치 디렉터리>/tomcat-users.xml"
 
@@ -398,7 +398,7 @@ check_CSAP_Tomcat_03() {
     local checked_any=false
     local missing_only=true
     local target_spec_1
-    target_spec_1=//tomcat-users.xml
+    target_spec_1=/tomcat-users.xml
     local resolved_target_1
     resolved_target_1="$target_spec_1"
     if [ -n "$resolved_target_1" ]; then
@@ -422,7 +422,7 @@ check_CSAP_Tomcat_03() {
         done
     fi
     local target_spec_2
-    target_spec_2=/tomcat-users.xml
+    target_spec_2=${CATALINA_HOME:-/usr/local/tomcat}/conf/tomcat-users.xml
     local resolved_target_2
     resolved_target_2="$target_spec_2"
     if [ -n "$resolved_target_2" ]; then
@@ -437,30 +437,6 @@ check_CSAP_Tomcat_03() {
                 case "$result_2" in
                     VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_2). " ;;
                     GOOD*) detail+="$target_path 권한 적절($result_2). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_3
-    target_spec_3=${CATALINA_HOME:-/usr/local/tomcat}/conf/tomcat-users.xml
-    local resolved_target_3
-    resolved_target_3="$target_spec_3"
-    if [ -n "$resolved_target_3" ]; then
-        for target_path in $resolved_target_3; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_3
-                result_3=$(check_file_owner_perm "$target_path" "" "600")
-                cur_state+="$target_path: $result_3; "
-                case "$result_3" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_3). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_3). " ;;
                     NOT_FOUND) detail+="$target_path 파일 없음. " ;;
                 esac
             else
@@ -487,7 +463,7 @@ check_CSAP_Tomcat_03() {
 check_CSAP_Tomcat_06() {
     local status="양호"
     local detail=""
-    local cmd="cfg=\${CATALINA_HOME:-/usr/local/tomcat}/conf/web.xml; if [ -f \"\$cfg\" ]; then out=\$(grep -Ein \"<param-name>listings</param-name>|<param-value>false</param-value>\" \"\$cfg\" 2>/dev/null | head -20); if [ -n \"\$out\" ]; then printf '%s\\n' \"\$out\"; else echo \"SETTING_DEFAULT_GOOD|DefaultServlet 기본값은 directory listing 비활성입니다.\"; fi; else echo \"FILE_DEFAULT_GOOD|DefaultServlet 기본값은 directory listing 비활성입니다.\"; fi"
+    local cmd="[Tomcat 설치 디렉터리]/web.xml"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ 디렉터리 리스팅 비활성화 1) # vi [Tomcat 설치 디렉터리]/web.xml [주요기반시설 가이드] 디렉터리 리스팅 기능 차단 설정 [상세 조치 사례] l Tomcat Step 1) web.xml 파일 내 listings 옵션 비활성화 # vi /<Tomcat 설치 디렉터리>/web.xml <init-param> <param-name>listings</param-name> <param-value>false</param-value> </init-param>"
 
@@ -548,7 +524,7 @@ check_CSAP_Tomcat_06() {
 check_CSAP_Tomcat_07() {
     local status="양호"
     local detail=""
-    local cmd="cat /web.xml"
+    local cmd="cat [Tomcat 설치 디렉터리]/web.xml 내 에러 페이지 설정 확인"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ 에러 코드 설정 파일 수정 1) 필수 에러 코드(400,401,403,404,500)에 대한 에러 내용을 알 수 없도록 일원화된 에러 페이지로 관리 ※ 에러가 발생 시, 일원화된 에러 페이지가 표시되도록 하는 방식이 아닌 로그인 페이지로 리다이렉션되는 방식 또한 양호로 처리함 [주요기반시설 가이드] 필수 에러 코드에 대해 일원화된 에러 페이지 사용 및 에러 페이지 내 불필요 정보 노출 제한 설정 [상세 조치 사례] l Tomcat Step 1) web.xml 파일 내 에러 코드별 에러 페이지 설정 정보 확인 후 별도의 일원화된 에러 페이지 설정 # vi /[Tomcat 설치 디렉터리]/conf/web.xml <error-page> <error-code>404</error-code> <location>/error/404.html</location> (이하 생략) </error-page> Step 2) Tomcat 재구동 # systemctl restart tomcat"
 
@@ -617,7 +593,7 @@ check_CSAP_Tomcat_07() {
 check_CSAP_Tomcat_04() {
     local status="양호"
     local detail=""
-    local cmd="cat /server.xml | grep appBase; ls -al"
+    local cmd="cat [Tomcat 환경 설정 디렉터리]/server.xml | grep appBase (예시); ls -al [Tomcat 설치 디렉터리]"
     local cur_state=""
     local remediation="￭ 홈 디렉터리 접근 권한 변경 (예시) 1) # chmod 755 [Tomcat 설치 디렉터리]/webapps ※ 설정 파일 권한 변경 시, 시스템 영향도를 파악하여 충분한 테스트를 진행한 후에 접근권한 수정"
 
@@ -644,7 +620,7 @@ check_CSAP_Tomcat_04() {
 check_CSAP_Tomcat_05() {
     local status="양호"
     local detail=""
-    local cmd="ls -al; cat /server.xml | grep appBase"
+    local cmd="ls -al [Tomcat 설치 디렉터리]; cat [Tomcat 설치 디렉터리]/server.xml | grep appBase (예시)"
     local cur_state=""
     local remediation="￭ 파일 권한 변경 1) 설정 파일 권한 변경 # chmod 600 [해당 파일] 2) 소스 파일 권한 변경 # chmod 644 [해당 파일]"
 
@@ -794,7 +770,7 @@ check_CSAP_Tomcat_08() {
 check_CSAP_Tomcat_09() {
     local status="양호"
     local detail=""
-    local cmd="/bin/version.sh; rpm -qa | grep webapps"
+    local cmd="[Tomcat 설치 디렉터리]/bin/version.sh 또는; rpm -qa | grep webapps"
     local cur_state=""
     local remediation="￭ 보안 패치 적용 1) 취약점이 없는 보안 패치가 적용된 버전으로 업데이트해야 함 ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
 
@@ -1085,167 +1061,13 @@ check_ISMS_WEB_08() {
 check_ISMS_WEB_09() {
     local status="양호"
     local detail=""
-    local cmd="chown -R tomcat:tomcat //usr/share/tomcat9/; chown -R tomcat:tomcat //tomcat9/temp; chown -R tomcat:tomcat / /logs"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="웹 서비스 프로세스 구동 시 관리자 권한이 아닌 운영에 필요한 최소한의 권한을 가진 계정으로 구동 설정 [상세 조치 사례] l Tomcat Step 1) tomcat.service 파일 내 Tomcat 데몬 구동 권한을 관리자 계정이 아닌 별도 계정으로 변경 # vi /etc/systemd/system/tomcat.service [Service] User=tomcat Group=tomcat Step 2) Tomcat 서비스 파일 소유권 변경 # chown -R tomcat:tomcat /[Tomcat 설치 디렉터리]/usr/share/tomcat9/ # chown -R tomcat:tomcat /[Tomcat 설치 디렉터리]/tomcat9/temp # chown -R tomcat:tomcat / [Tomcat 설치 디렉터리]/logs # chown -R tomcat:tomcat /usr/share/tomcat9/webapps # chown -R tomcat:tomcat /usr/share/tomcat9/work Step 3) 웹서비스 실행 계정 로그인 제한 설정 # usermod -s /sbin/nologin [사용자명] Step 4) Tomcat 서비스 재구동 # systemctl restart tomcat"
 
-    local vuln_found=false
-    local checked_any=false
-    local missing_only=true
-    local target_spec_1
-    target_spec_1=//usr/share/tomcat9/
-    local resolved_target_1
-    resolved_target_1="$target_spec_1"
-    if [ -n "$resolved_target_1" ]; then
-        for target_path in $resolved_target_1; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_1
-                result_1=$(check_file_owner_perm "$target_path" "-r" "644")
-                cur_state+="$target_path: $result_1; "
-                case "$result_1" in
-                    VULN*) vuln_found=true; detail+="$target_path 소유자/권한 부적절($result_1). " ;;
-                    GOOD*) detail+="$target_path 소유자/권한 적절($result_1). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_2
-    target_spec_2=//tomcat9/temp
-    local resolved_target_2
-    resolved_target_2="$target_spec_2"
-    if [ -n "$resolved_target_2" ]; then
-        for target_path in $resolved_target_2; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_2
-                result_2=$(check_file_owner_perm "$target_path" "-r" "644")
-                cur_state+="$target_path: $result_2; "
-                case "$result_2" in
-                    VULN*) vuln_found=true; detail+="$target_path 소유자/권한 부적절($result_2). " ;;
-                    GOOD*) detail+="$target_path 소유자/권한 적절($result_2). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_3
-    target_spec_3=/logs
-    local resolved_target_3
-    resolved_target_3="$target_spec_3"
-    if [ -n "$resolved_target_3" ]; then
-        for target_path in $resolved_target_3; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_3
-                result_3=$(check_file_owner_perm "$target_path" "-r" "644")
-                cur_state+="$target_path: $result_3; "
-                case "$result_3" in
-                    VULN*) vuln_found=true; detail+="$target_path 소유자/권한 부적절($result_3). " ;;
-                    GOOD*) detail+="$target_path 소유자/권한 적절($result_3). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_4
-    target_spec_4=/usr/share/tomcat9/webapps
-    local resolved_target_4
-    resolved_target_4="$target_spec_4"
-    if [ -n "$resolved_target_4" ]; then
-        for target_path in $resolved_target_4; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_4
-                result_4=$(check_file_owner_perm "$target_path" "-r" "644")
-                cur_state+="$target_path: $result_4; "
-                case "$result_4" in
-                    VULN*) vuln_found=true; detail+="$target_path 소유자/권한 부적절($result_4). " ;;
-                    GOOD*) detail+="$target_path 소유자/권한 적절($result_4). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_5
-    target_spec_5=/usr/share/tomcat9/work
-    local resolved_target_5
-    resolved_target_5="$target_spec_5"
-    if [ -n "$resolved_target_5" ]; then
-        for target_path in $resolved_target_5; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_5
-                result_5=$(check_file_owner_perm "$target_path" "-r" "644")
-                cur_state+="$target_path: $result_5; "
-                case "$result_5" in
-                    VULN*) vuln_found=true; detail+="$target_path 소유자/권한 부적절($result_5). " ;;
-                    GOOD*) detail+="$target_path 소유자/권한 적절($result_5). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_6
-    target_spec_6=${CATALINA_HOME:-/usr/local/tomcat}/conf/tomcat-users.xml
-    local resolved_target_6
-    resolved_target_6="$target_spec_6"
-    if [ -n "$resolved_target_6" ]; then
-        for target_path in $resolved_target_6; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_6
-                result_6=$(check_file_owner_perm "$target_path" "-r" "644")
-                cur_state+="$target_path: $result_6; "
-                case "$result_6" in
-                    VULN*) vuln_found=true; detail+="$target_path 소유자/권한 부적절($result_6). " ;;
-                    GOOD*) detail+="$target_path 소유자/권한 적절($result_6). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    if [ "$vuln_found" = "true" ]; then
-        status="취약"
-    elif [ "$checked_any" = "false" ]; then
-        status="수동점검"
-        detail="점검 대상 파일 경로를 자동으로 해석하지 못했습니다. "
-        cur_state="경로 자동 해석 실패"
-    elif [ "$missing_only" = "true" ]; then
-        status="N/A"
-    fi
-    [ -z "$detail" ] && detail="웹 프로세스(웹 서비스)가 관리자 권한이 부여된 계정이 아닌 운영에 필요한 최소한의 권한을 가진" && cur_state="점검 대상 파일 없음"
+    status="수동점검"
+    detail="수동 점검 필요 항목입니다. 웹 프로세스(웹 서비스)가 관리자 권한이 부여된 계정이 아닌 운영에 필요한 최소한의 권한을 가진"
+    cur_state="수동점검 필요"
 
     add_result "ISMS-WEB-09" "웹 서비스 > 2. 서비스 관리" "웹 서비스 프로세스 권한 제한" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
@@ -1429,167 +1251,13 @@ check_ISMS_WEB_12() {
 check_ISMS_WEB_13() {
     local status="양호"
     local detail=""
-    local cmd="chmod 600 //conf/server.xml"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="DB 연결 파일에 대한 접근 권한 제한 또는 불필요한 스크립트 매핑 제거 등을 통한 웹 서비스 내 DB 연결 취약점 제거 설정 [상세 조치 사례] l Tomcat Step 1) server.xml 파일 내 불필요한 DB 연결 리소스 설정 제거 <GlobalNamingResources> <Resource name=\"jdbc/MyDB\" auth=\"Container\" type=\"javax.sql.DataSource\" maxTotal=\"100\" maxIdle=\"30\" maxWaitMillis=\"10000\" username=\"dbuser\" 03. 웹 서비스 password=\"dbpassword\" driverClassName=\"com.mysql.jdbc.Driver\" url=\"jdbc:mysql://localhost:3306/mydb\"/> </GlobalNamingResources> Step 2) DB 연결 리소스가 존재하는 설정 파일 접근권한을 600으로 설정 # chmod 600 /[Tomcat 설치 디렉터리]/conf/server.xml"
 
-    local vuln_found=false
-    local checked_any=false
-    local missing_only=true
-    local target_spec_1
-    target_spec_1=//conf/server.xml
-    local resolved_target_1
-    resolved_target_1="$target_spec_1"
-    if [ -n "$resolved_target_1" ]; then
-        for target_path in $resolved_target_1; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_1
-                result_1=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_1; "
-                case "$result_1" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_1). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_1). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_2
-    target_spec_2=/MyDB
-    local resolved_target_2
-    resolved_target_2="$target_spec_2"
-    if [ -n "$resolved_target_2" ]; then
-        for target_path in $resolved_target_2; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_2
-                result_2=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_2; "
-                case "$result_2" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_2). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_2). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_3
-    target_spec_3=//localhost
-    local resolved_target_3
-    resolved_target_3="$target_spec_3"
-    if [ -n "$resolved_target_3" ]; then
-        for target_path in $resolved_target_3; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_3
-                result_3=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_3; "
-                case "$result_3" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_3). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_3). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_4
-    target_spec_4=/mydb
-    local resolved_target_4
-    resolved_target_4="$target_spec_4"
-    if [ -n "$resolved_target_4" ]; then
-        for target_path in $resolved_target_4; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_4
-                result_4=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_4; "
-                case "$result_4" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_4). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_4). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_5
-    target_spec_5=/GlobalNamingResources
-    local resolved_target_5
-    resolved_target_5="$target_spec_5"
-    if [ -n "$resolved_target_5" ]; then
-        for target_path in $resolved_target_5; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_5
-                result_5=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_5; "
-                case "$result_5" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_5). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_5). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_6
-    target_spec_6=${CATALINA_HOME:-/usr/local/tomcat}/conf/server.xml
-    local resolved_target_6
-    resolved_target_6="$target_spec_6"
-    if [ -n "$resolved_target_6" ]; then
-        for target_path in $resolved_target_6; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_6
-                result_6=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_6; "
-                case "$result_6" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_6). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_6). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    if [ "$vuln_found" = "true" ]; then
-        status="취약"
-    elif [ "$checked_any" = "false" ]; then
-        status="수동점검"
-        detail="점검 대상 파일 경로를 자동으로 해석하지 못했습니다. "
-        cur_state="경로 자동 해석 실패"
-    elif [ "$missing_only" = "true" ]; then
-        status="N/A"
-    fi
-    [ -z "$detail" ] && detail="일반 사용자의 DB 연결 파일에 대한 접근을 제한하고, 불필요한 스크립트 매핑이 제거된 경우" && cur_state="점검 대상 파일 없음"
+    status="수동점검"
+    detail="수동 점검 필요 항목입니다. 일반 사용자의 DB 연결 파일에 대한 접근을 제한하고, 불필요한 스크립트 매핑이 제거된 경우"
+    cur_state="수동점검 필요"
 
     add_result "ISMS-WEB-13" "웹 서비스 > 2. 서비스 관리" "웹 서비스 설정 파일 노출 제한" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
@@ -1598,71 +1266,13 @@ check_ISMS_WEB_13() {
 check_ISMS_WEB_14() {
     local status="양호"
     local detail=""
-    local cmd="chown -R : web.xml; chmod -R 750 web.xml"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="주요 설정 파일 및 디렉터리에 불필요한 접근 권한 제거 설정 [상세 조치 사례] l Tomcat Step 1) 루트 디렉터리 불필요한 권한 삭제 또는 적절한 권한 부여 # chown –R [Tomcat 계정]:[Tomcat 그룹] web.xml # chmod -R 750 web.xml 312"
 
-    local vuln_found=false
-    local checked_any=false
-    local missing_only=true
-    local target_spec_1
-    target_spec_1=${CATALINA_HOME:-/usr/local/tomcat}/conf/server.xml
-    local resolved_target_1
-    resolved_target_1="$target_spec_1"
-    if [ -n "$resolved_target_1" ]; then
-        for target_path in $resolved_target_1; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_1
-                result_1=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_1; "
-                case "$result_1" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_1). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_1). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_2
-    target_spec_2=${CATALINA_HOME:-/usr/local/tomcat}/conf/web.xml
-    local resolved_target_2
-    resolved_target_2="$target_spec_2"
-    if [ -n "$resolved_target_2" ]; then
-        for target_path in $resolved_target_2; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_2
-                result_2=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_2; "
-                case "$result_2" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_2). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_2). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    if [ "$vuln_found" = "true" ]; then
-        status="취약"
-    elif [ "$checked_any" = "false" ]; then
-        status="수동점검"
-        detail="점검 대상 파일 경로를 자동으로 해석하지 못했습니다. "
-        cur_state="경로 자동 해석 실패"
-    elif [ "$missing_only" = "true" ]; then
-        status="N/A"
-    fi
-    [ -z "$detail" ] && detail="주요 설정 파일 및 디렉터리에 불필요한 접근 권한이 부여되지 않은 경우" && cur_state="점검 대상 파일 없음"
+    status="수동점검"
+    detail="수동 점검 필요 항목입니다. 주요 설정 파일 및 디렉터리에 불필요한 접근 권한이 부여되지 않은 경우"
+    cur_state="수동점검 필요"
 
     add_result "ISMS-WEB-14" "웹 서비스 > 2. 서비스 관리" "웹 서비스 경로 내 파일의 접근 통제" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
@@ -1915,7 +1525,7 @@ check_ISMS_WEB_19() {
 check_ISMS_WEB_23() {
     local status="양호"
     local detail=""
-    local cmd="grep 'digest=' //conf/server.xml"
+    local cmd="grep 'digest=' /[Tomcat 설치 디렉터리]/conf/server.xml"
     local cur_state=""
     local remediation="LDAP 연결 인증 시 SHA-256 이상의 알고리즘을 사용하도록 설정 [상세 조치 사례] l Tomcat Step 1) 비밀번호 다이제스트 알고리즘 확인 (LDAP 종류별 암호화 알고리즘 지원 여부 확인) # grep 'digest=' /[Tomcat 설치 디렉터리]/conf/server.xml digest=\"SSHA\" Step 2) 비밀번호 다이제스트 알고리즘 설정 # vi /[Tomcat 설치 디렉터리]/conf/server.xml digest=\"SHA-256\" Step 3) Tomcat 재구동 # systemctl restart tomcat ※ SHA-256 이상 암호화 알고리즘 권고 03. 웹 서비스 343"
 
@@ -1942,60 +1552,13 @@ check_ISMS_WEB_23() {
 check_ISMS_WEB_24() {
     local status="양호"
     local detail=""
-    local cmd="mkdir; mkdir /var/www/html/uploads"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="기본 경로가 아닌 별도의 업로드 경로를 지정하고, 해당 경로에 대한 일반 사용자의 접근 권한을 제한하도록 설정 [상세 조치 사례] l Tomcat Step 1) server.xml 파일 내 Context 요소 allowLinking 옵션 설정 (기본값 : 업로드 디렉터리 경로 존재하지 않음) # vi /[Tomcat 설치 디렉터리]/conf/context.xml <servlet> <servlet-name>fileUploadServlet</servlet-name> <servlet-class>com.example.FileUploadServlet</servlet-class> </servlet> Step 2) 별도의 업로드 경로 생성 # mkdir [웹서비스 디렉터리 외 경로] # mkdir /var/www/html/uploads Step 3) 업로드 디렉터리 권한 설정 chmod 750 /var/www/html/uploads/ chown tomcat:tomcat /var/www/html/uploads/ Step 4) 지정한 디렉터리 권한을 웹 서비스에서 사용"
 
-    local output
-    output=$({
-        ( mkdir )
-        ( mkdir /var/www/html/uploads )
-    } 2>/dev/null | sed '/^$/d' | head -20)
-    cur_state="$output"
-
-    if [ -z "$output" ]; then
-        status="양호"
-        detail="별도의 업로드 경로를 사용하고 일반 사용자의 접근 권한이 부여되지 않은 경우"
-    else
-        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="해당 파일이 없으므로 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
-            local missing_text
-            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
-            status="수동점검"
-            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
-        else
-        if output_has_negative_marker "$output"; then
-            status="양호"
-            detail="별도의 업로드 경로를 사용하고 일반 사용자의 접근 권한이 부여되지 않은 경우"
-        elif output_has_positive_marker "$output"; then
-            status="취약"
-            detail="별도의 업로드 경로를 사용하지 않거나, 일반 사용자의 접근 권한이 부여된 경우"
-        else
-            status="취약"
-            detail="별도의 업로드 경로를 사용하지 않거나, 일반 사용자의 접근 권한이 부여된 경우"
-        fi
-        fi
-    fi
-    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
+    status="수동점검"
+    detail="수동 점검 필요 항목입니다. 별도의 업로드 경로를 사용하고 일반 사용자의 접근 권한이 부여되지 않은 경우"
+    cur_state="수동점검 필요"
 
     add_result "ISMS-WEB-24" "웹 서비스 > 3. 보안 설정" "별도의 업로드 경로 사용 및 권한 설정" "중" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
@@ -2004,13 +1567,12 @@ check_ISMS_WEB_24() {
 check_ISMS_WEB_25() {
     local status="양호"
     local detail=""
-    local cmd="cd //lib; java -cp catalina.jar org.apache.catalina.util.ServerInfo"
+    local cmd="cd /[Tomcat 설치 디렉터리]/lib; java -cp catalina.jar org.apache.catalina.util.ServerInfo"
     local cur_state=""
     local remediation="패치 적용에 따른 서비스 영향 정도를 정확히 파악하여 주기적인 패치 적용 정책 수립 및 적용하도록 설정 [상세 조치 사례] l Tomcat Step 1) 웹 서버 버전과 최신 패치 버전을 비교하여 확인 # cd /[Tomcat 설치 디렉터리]/lib # java -cp catalina.jar org.apache.catalina.util.ServerInfo [ Tomcat 웹 서버 버전 확인 ] Step 2) Tomcat 사이트를 통해 주기적으로 버전 점검을 하며, 최신 버전 적용 시 충분한 테스트 후 적용 권고 ※ 참고 사이트: https://tomcat.apache.org/"
 
     local output
     output=$({
-        ( cd //lib )
         ( java -cp catalina.jar org.apache.catalina.util.ServerInfo )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
@@ -2058,7 +1620,7 @@ check_ISMS_WEB_25() {
 check_ISMS_WEB_26() {
     local status="양호"
     local detail=""
-    local cmd="ls -al /; chmod o-rwx /"
+    local cmd="ls -al /<Tomcat 로그 디렉터리>"
     local cur_state=""
     local remediation="로그 디렉터리 및 파일에 일반 사용자 접근 권한 제거 설정 [상세 조치 사례] l Tomcat Step 1) 로그 디렉터리 및 파일 권한 확인 # ls –al /<Tomcat 로그 디렉터리> Step 2) 로그 디렉터리 및 파일의 불필요 권한 삭제 # chmod o-rwx /<Tomcat 로그 파일> 03. 웹 서비스 351"
 

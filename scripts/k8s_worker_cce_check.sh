@@ -209,11 +209,10 @@ fi
 check_CSAP_K8sWorker_01() {
     local status="양호"
     local detail=""
-    local cmd="수동점검 필요"
+    local cmd="cat [kubelet service 파일 경로] | grep \"anonymous-auth|read-only-port\" | grep -v \"#\"; cat [kubelet config 파일 경로]"
     local cur_state=""
     local remediation="￭ Kubelet service 파일을 사용하는 경우 1) vi 명령어를 통해 —anonymous-auth 설정을 false로 —read-only-port 설정을 0으로 설정 \$ vi [kubelet service 경로] Environment=\"KUBELET_SYSTEM_PODS_ARGS=--anonymous-auth=false --read-only-prot=0\" 설정 추가 2) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service ￭ Kubelet config 파일을 사용하는 경우 1) vi 명령어를 통해 --anonymous-auth 설정을 false로 --read-only-port 설정을 0으로 설정 \$ vi [kubelet config 파일 경로] 2) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service"
 
-    cmd="grep -E \"anonymous|readOnlyPort|read-only-port\" kubelet config/service"
     local kubelet_conf="${KUBELET_CONF:-/var/lib/kubelet/config.yaml}"
     local kubelet_service_conf="${KUBELET_SERVICE_CONF:-/usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf}"
     local output
@@ -239,11 +238,10 @@ check_CSAP_K8sWorker_01() {
 check_CSAP_K8sWorker_02() {
     local status="양호"
     local detail=""
-    local cmd="수동점검 필요"
+    local cmd="cat [kubelet service 파일 경로] | grep \"authorization-mode\" | grep -v \"#\"; cat [kubelet config 파일 경로]"
     local cur_state=""
     local remediation="￭ Kubelet service 파일을 사용하는 경우 1) vi 명령어를 통해 --authorization-mode 설정에 모드 설정 \$ vi [kubelet service 파일 경로] Environment=\"KUBELET_SYSTEM_PODS_ARGS=--anonymous-auth=false --read-only-prot=0\" 설정 추가 2) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service ￭ Kubelet config 파일을 사용하는 경우 1) vi 명령어를 통해 --authorization-mode 설정에 모드 설정 \$ vi [kubelet config 파일 경로] 2) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service"
 
-    cmd="grep -E \"authorization-mode|authorization:|mode:\" kubelet config/service"
     local kubelet_conf="${KUBELET_CONF:-/var/lib/kubelet/config.yaml}"
     local kubelet_service_conf="${KUBELET_SERVICE_CONF:-/usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf}"
     local output
@@ -272,11 +270,10 @@ check_CSAP_K8sWorker_02() {
 check_CSAP_K8sWorker_03() {
     local status="양호"
     local detail=""
-    local cmd="cat --hostname-override"
+    local cmd="cat [kubelet config 파일 경로]; cat [kubelet service 파일 경로]"
     local cur_state=""
     local remediation="￭ kubelet config 파일에서 클라이언트 CA 인증서 설정 1) \$ cat [kubelet config 파일 경로] clientCAFile : [CA 인증서 파일 경로] ￭ kubelet config 파일에서 TLS 인증서와 Private key가 설정되어 있는지 확인 1) \$ cat [kubelet config 파일 경로] tlsCertFile : [인증서 파일 경로] tlsPrivateKeyFile : [Private key 파일 경로] ￭ kubelet config 파일에서 인증서 교환주기 설정이 되어 있는지 확인 1) \$ cat [kubelet config 파일 경로] tlsCertFile : [인증서 파일 경로] tlsPrivateKeyFile : [Private key 파일 경로] ￭ kubelet config 파일에서 TLS 통신에 사용되는 TLS 버전 및 cipher suites 확인 1) \$ cat [kubelet config 파일 경로] TLSCipherSuites : TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305 TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305 TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 TLS_RSA_WITH_AES_256_GCM_SHA384 TLS_RSA_WITH_AES_128_GCM_SHA256 ￭ kubelet service 파일에서 hostname이 변경되지 않도록 설정되어 있는지 확인 1) \$ cat [kubelet service 파일 경로]를 확인하여 --hostname-override 설정이 존재하는지 확인(존재하지 않아야 함)"
 
-    cmd="grep -E \"clientCAFile|tlsCertFile|tlsPrivateKeyFile|tlsCipherSuites|serverTLSBootstrap|rotateCertificates|hostname-override\" kubelet config/service"
     local kubelet_conf="${KUBELET_CONF:-/var/lib/kubelet/config.yaml}"
     local kubelet_service_conf="${KUBELET_SERVICE_CONF:-/usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf}"
     local output
@@ -305,11 +302,10 @@ check_CSAP_K8sWorker_03() {
 check_CSAP_K8sWorker_04() {
     local status="양호"
     local detail=""
-    local cmd="수동점검 필요"
+    local cmd="cat [kubelet service 파일 경로] | grep \"authorization-mode\" | grep -v \"#\"; cat [kubelet config 파일 경로]"
     local cur_state=""
     local remediation="￭ kubelet service 파일을 사용하는 경우 1) --protect-kernel-defaults 설정이 true로 설정 \$ vi [kubelet service 파일 경로] Environment=\"KUBELET_SYSTEM_PODS_ARGS=--protect-kernel-defaults =true\" 설정 추가 2) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service ￭ Kubelet config 파일을 사용하는 경우 1) vi 명령어를 통해 protectKernelDefaults 설정을 true로 설정 \$ vi [kubelet config 파일 경로] 2) kubelet 서비스 재시작 \$ systemctl daemon-reload \$ systemctl restart kubelet.service"
 
-    cmd="grep -E \"protectKernelDefaults|protect-kernel-defaults\" kubelet config/service"
     local kubelet_conf="${KUBELET_CONF:-/var/lib/kubelet/config.yaml}"
     local kubelet_service_conf="${KUBELET_SERVICE_CONF:-/usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf}"
     local output
@@ -456,7 +452,7 @@ check_CSAP_K8sWorker_05() {
 check_CSAP_K8sWorker_06() {
     local status="양호"
     local detail=""
-    local cmd="ls -al"
+    local cmd="ls -al [인증서를 생성한 위치]"
     local cur_state=""
     local remediation="￭ 인증서 파일 권한과 소유자가 root로 되어 있는지 확인 \$ chown root:root [변경할 파일명] ￭ 인증서 파일의 접근 권한이 644를 초과하는 경우 644 이하로 조치 \$ chmod 644 [변경할 파일명]"
 

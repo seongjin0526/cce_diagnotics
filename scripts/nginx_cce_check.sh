@@ -270,7 +270,7 @@ fi
 check_CSAP_Nginx_01() {
     local status="양호"
     local detail=""
-    local cmd="cfg=\${NGINX_CONF:-/etc/nginx/nginx.conf}; if [ -f \"\$cfg\" ]; then out=\$(grep -Ein \"^[[:space:]]*root[[:space:]]+|^[[:space:]]*alias[[:space:]]+\" \"\$cfg\" 2>/dev/null | head -20); printf '%s\\n' \"\$out\"; else echo \"FILE_DEFAULT_BAD|기본 웹 루트 경로 분리 여부를 확인할 수 없습니다.\"; fi"
+    local cmd="cat [Nginx 환경 설정 파일] | grep root"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ 기본 디렉터리 위치 변경 (예시) 1) # vi [Nginx 환경 설정 파일] [주요기반시설 가이드] 웹 서버의 경로를 별도의 경로로 변경 및 불필요한 경로 제거 설정 [상세 조치 사례] l Nginx Step 1) sites-available 파일 내 DocumentRoot를 별도의 경로로 변경 # vi /[Nginx 설치 디렉터리]/sites-available root [별도의 경로]"
 
@@ -331,7 +331,7 @@ check_CSAP_Nginx_01() {
 check_CSAP_Nginx_02() {
     local status="양호"
     local detail=""
-    local cmd="ls -al"
+    local cmd="ls -al [Nginx 설정 디렉터리]"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ 불필요한 파일 삭제 1) 주기적으로 Nginx 설정 디렉터리 내 불필요한 파일(test, old, bak 파일 등)을 확인 2) # cd [Nginx 설치 디렉터리] 3) # rm –rf [불필요한 파일명] [주요기반시설 가이드] 불필요한 파일 및 디렉터리를 제거하도록 설정 [상세 조치 사례] l Nginx Step 1) rm 명령어로 확인된 불필요한 매뉴얼 디렉터리 및 파일 제거 # rm –rf /<Nginx 설치 디렉터리>/html/index.html"
 
@@ -384,7 +384,7 @@ check_CSAP_Nginx_02() {
 check_CSAP_Nginx_03() {
     local status="양호"
     local detail=""
-    local cmd="car | grep disable_symlinks"
+    local cmd="car [Nginx 설정 파일] | grep \"disable_symlinks"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ 심볼릭 링크 제한 1) # vi [Nginx 설정 파일] [주요기반시설 가이드] 웹 서비스 링크 사용 제한 설정 [상세 조치 사례] l Nginx Step 1) nginx.conf 파일 내 설정된 모든 디렉터리의 disable_symlinks on 설정(기본값 : 설정값 없음) location / { root html; index index.html index.htm; disable_symlinks on; }"
 
@@ -454,7 +454,7 @@ check_CSAP_Nginx_03() {
 check_CSAP_Nginx_04() {
     local status="양호"
     local detail=""
-    local cmd="cfg=\${NGINX_CONF:-/etc/nginx/nginx.conf}; if [ -f \"\$cfg\" ]; then out=\$(grep -Ein \"client_max_body_size\" \"\$cfg\" 2>/dev/null | head -20); printf '%s\\n' \"\$out\"; else echo \"FILE_DEFAULT_BAD|기본값은 client_max_body_size 1m 입니다.\"; fi"
+    local cmd="cat [Ningx 설정 파일] | grep clien_max_body_size"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ 파일 업로드 및 다운로드 용량 제한 설정 1) # vi [Nginx 설정 파일] [주요기반시설 가이드] 파일 업로드 및 다운로드 용량을 허용 가능한 최소 범위로 제한하여 설정 [상세 조치 사례] l Nginx Step 1) nginx.conf 파일 내 client_max_body_size 요소 파일 용량 제한 설정 # vi /<Nginx 설치 디렉터리>/nginx.conf <Directory/> client_max_body_size 5M; (설정 단위: byte) </Directory> Step 2) Nginx 데몬 재구동 # systemctl restart nginx"
 
@@ -515,7 +515,7 @@ check_CSAP_Nginx_04() {
 check_CSAP_Nginx_05() {
     local status="양호"
     local detail=""
-    local cmd="cfg=\${NGINX_CONF:-/etc/nginx/nginx.conf}; if [ -f \"\$cfg\" ]; then out=\$(grep -Ein \"autoindex[[:space:]]+(on|off)\" \"\$cfg\" 2>/dev/null | head -20); if [ -n \"\$out\" ]; then printf '%s\\n' \"\$out\"; else echo \"SETTING_DEFAULT_GOOD|기본값은 autoindex off 입니다.\"; fi; else echo \"FILE_DEFAULT_GOOD|기본값은 autoindex off 입니다.\"; fi"
+    local cmd="cat [Ningx 설정 파일] | grep autoindex"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ 디렉터리 검색 기능 비활성화 1) # vi [Nginx 설정 파일] [주요기반시설 가이드] 디렉터리 리스팅 기능 차단 설정 [상세 조치 사례] l Nginx Step 1) nginx.conf 파일 내 autoindex 지시자 off 설정 # vi /<Nginx 설치 디렉터리>/conf/nginx.conf server { autoindex off; } Step 2) Nginx 재시작 # systemctl restart nginx"
 
@@ -637,7 +637,7 @@ check_CSAP_Nginx_06() {
 check_CSAP_Nginx_07() {
     local status="양호"
     local detail=""
-    local cmd="/nginx -v"
+    local cmd="[Nginx 실행 디렉터리]/nginx -v"
     local cur_state=""
     local remediation="￭ 보안 패치 적용 1) 보안 취약점이 존재하지 않는 버전으로 보안패치를 적용해야 함 ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
 
@@ -690,7 +690,7 @@ check_CSAP_Nginx_07() {
 check_ISMS_WEB_05() {
     local status="양호"
     local detail=""
-    local cmd="cat //conf/nginx.conf"
+    local cmd="cat /<Nginx 설치 디렉터리>/conf/nginx.conf"
     local cur_state=""
     local remediation="CGI 스크립트를 정해진 디렉터리 내에서만 실행할 수 있도록 설정 [상세 조치 사례] l Nginx Step 1) nginx.conf 파일 내 Fastcgi 사용 여부 확인 # cat /<Nginx 설치 디렉터리>/conf/nginx.conf location ~ \\.cgi\$ { #fastcgi_pass <FastCGI 서버 주소>:<FastCGI 서버 통신 포트>; #include fastcgi_params; } Step 2) Nginx 재시작"
 
@@ -764,7 +764,7 @@ check_ISMS_WEB_05() {
 check_ISMS_WEB_06() {
     local status="양호"
     local detail=""
-    local cmd="cat //conf/nginx.conf"
+    local cmd="cat /<Nginx 설치 디렉터리>/conf/nginx.conf"
     local cur_state=""
     local remediation="상위 디렉터리 접근 기능 제거 설정 [상세 조치 사례] l Nginx Step 1) nginx.conf 파일 내 디렉터리 접근을 기본 인증으로 제한 설정 # cat /<Nginx 설치 디렉터리>/conf/nginx.conf location /<접근제한 디렉터리>/ { auth_basic \"Restricted Content\"; auth_basic_user_file /etc/nginx/.htpasswd; }"
 
@@ -796,24 +796,16 @@ check_ISMS_WEB_06() {
 check_ISMS_WEB_10() {
     local status="양호"
     local detail=""
-    local cmd="cat /[Nginx /nginx.conf"
+    local cmd="cfg=\${NGINX_CONF:-/etc/nginx/nginx.conf}; if [ -f \"\$cfg\" ]; then out=\$(grep -Ein \"proxy_pass|proxy_set_header|proxy_redirect\" \"\$cfg\" 2>/dev/null | head -20); if [ -n \"\$out\" ]; then printf '%s\\n' \"\$out\"; else echo \"SETTING_DEFAULT_GOOD|기본적으로 reverse proxy 지시자가 설정되지 않았습니다.\"; fi; else echo \"FILE_MISSING|설정 파일을 찾지 못했습니다.\"; fi"
     local cur_state=""
     local remediation="불필요한 Proxy 설정 존재 여부 점검 및 제한 설정 [상세 조치 사례] l Nginx Step 1) nginx.conf 파일 내 웹 사이트에서 불필요한 Proxy 설정 제거 # cat /[Nginx 설치 디렉터리/nginx.conf location / { proxy_pass http://backendserver:8080; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; }"
 
-    local config_file="${NGINX_CONF:-/etc/nginx/nginx.conf}"
-    [ -n "${NGINX_CONF:-}" ] && config_file="${NGINX_CONF}"
-    # Expand wildcards/find actual config
-    local actual_config
-    actual_config=$(ls $config_file 2>/dev/null | head -1)
-    if [ -z "$actual_config" ]; then
-        detail="설정 파일 없음($config_file). "
-        cur_state="설정 파일 없음"
-        status="N/A"
-    else
-        local grep_result
-        grep_result=$(grep -Ei "proxy_pass|proxy_set_header|proxy_redirect" "$actual_config" 2>/dev/null)
-        output="$grep_result"
-        cur_state="$grep_result"
+    local output
+    output=$({
+        ( get_process_snapshot "proxy_pass" )
+    } 2>/dev/null | sed '/^$/d' | head -20)
+    cur_state="$output"
+
     if [ -z "$output" ]; then
         status="양호"
         detail="불필요한 Proxy 설정을 제한한 경우"
@@ -849,7 +841,6 @@ check_ISMS_WEB_10() {
         fi
     fi
     [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
-    fi
 
     add_result "ISMS-WEB-10" "웹 서비스 > 2. 서비스 관리" "불필요한 프록시 설정 제한" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
@@ -858,47 +849,13 @@ check_ISMS_WEB_10() {
 check_ISMS_WEB_14() {
     local status="양호"
     local detail=""
-    local cmd="chown -R : web.xml; chmod -R 750 web.xml"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="주요 설정 파일 및 디렉터리에 불필요한 접근 권한 제거 설정 [상세 조치 사례] l Nginx Step 1) 루트 디렉터리 불필요한 권한 삭제 또는 적절한 권한 부여 # chown –R <Nginx 계정>:<Nginx 그룹> web.xml # chmod -R 750 web.xml"
 
-    local vuln_found=false
-    local checked_any=false
-    local missing_only=true
-    local target_spec_1
-    target_spec_1=${NGINX_CONF:-/etc/nginx/nginx.conf}
-    local resolved_target_1
-    resolved_target_1="$target_spec_1"
-    if [ -n "$resolved_target_1" ]; then
-        for target_path in $resolved_target_1; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_1
-                result_1=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_1; "
-                case "$result_1" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_1). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_1). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    if [ "$vuln_found" = "true" ]; then
-        status="취약"
-    elif [ "$checked_any" = "false" ]; then
-        status="수동점검"
-        detail="점검 대상 파일 경로를 자동으로 해석하지 못했습니다. "
-        cur_state="경로 자동 해석 실패"
-    elif [ "$missing_only" = "true" ]; then
-        status="N/A"
-    fi
-    [ -z "$detail" ] && detail="주요 설정 파일 및 디렉터리에 불필요한 접근 권한이 부여되지 않은 경우" && cur_state="점검 대상 파일 없음"
+    status="수동점검"
+    detail="수동 점검 필요 항목입니다. 주요 설정 파일 및 디렉터리에 불필요한 접근 권한이 부여되지 않은 경우"
+    cur_state="수동점검 필요"
 
     add_result "ISMS-WEB-14" "웹 서비스 > 2. 서비스 관리" "웹 서비스 경로 내 파일의 접근 통제" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
@@ -1029,7 +986,7 @@ check_ISMS_WEB_17() {
 check_ISMS_WEB_18() {
     local status="양호"
     local detail=""
-    local cmd="cat //conf/nginx.conf"
+    local cmd="cat /[Nginx 설치 디렉터리]/conf/nginx.conf"
     local cur_state=""
     local remediation="WebDAV 서비스 비활성화 설정 [상세 조치 사례] l Nginx Step 1) nginx.conf 파일 내 모든 디렉터리에서 WebDAV 설정 확인 # cat /[Nginx 설치 디렉터리]/conf/nginx.conf location /webdav { root /path/to/webdav; dav_methods PUT DELETE MKCOL COPY MOVE; dav_access user:rw group:rw all:r; create_full_put_path on; } Step 2) nginx.conf 파일 내 모든 디렉터리에서 WebDAV 설정 주석 처리 또는 제거 Step 3) Nginx 재구동 # systemctl restart nginx"
 
@@ -1090,7 +1047,7 @@ check_ISMS_WEB_18() {
 check_ISMS_WEB_19() {
     local status="양호"
     local detail=""
-    local cmd="cat //conf/nginx.conf"
+    local cmd="cat /[Nginx 설치 디렉터리]/conf/nginx.conf"
     local cur_state=""
     local remediation="웹 서비스 내 불필요한 SSI 사용 제한 설정 [상세 조치 사례] l Nginx Step 1) nginx.conf 파일 내 SSI 옵션 사용 여부 확인 # cat /[Nginx 설치 디렉터리]/conf/nginx.conf location / { ssi on; } Step 2) nginx.conf 파일 내 모든 디렉터리의 SSI 옵션 설정 # vi /[Nginx 설치 디렉터리]/conf/nginx.conf location / { ssi off; }"
 
@@ -1366,7 +1323,7 @@ check_ISMS_WEB_24() {
 check_ISMS_WEB_25() {
     local status="양호"
     local detail=""
-    local cmd="//nginx -v"
+    local cmd="/[Nginx Dir]/nginx -v"
     local cur_state=""
     local remediation="패치 적용에 따른 서비스 영향 정도를 정확히 파악하여 주기적인 패치 적용 정책 수립 및 적용하도록 설정 [상세 조치 사례] l Nginx Step 1) 웹 서버 버전과 최신 패치 버전을 비교하여 확인 # /[Nginx Dir]/nginx –v [ Nginx 웹 서버 버전 확인 ] Step 2) Nginx 사이트를 통해 주기적으로 버전 점검을 하며, 최신 버전 적용 시 충분한 테스트 후 적용 권고 ※ 참고 사이트: https://nginx.org/en/download.html"
 
@@ -1419,7 +1376,7 @@ check_ISMS_WEB_25() {
 check_ISMS_WEB_26() {
     local status="양호"
     local detail=""
-    local cmd="ls -al /; chmod o-rwx /"
+    local cmd="ls -al /<Nginx 로그 디렉터리>"
     local cur_state=""
     local remediation="로그 디렉터리 및 파일에 일반 사용자 접근 권한 제거 설정 [상세 조치 사례] l Nginx Step 1) 로그 디렉터리 및 파일의 권한 확인 # ls –al /<Nginx 로그 디렉터리> Step 2) 로그 디렉터리 및 파일의 불필요 권한 삭제 # chmod o-rwx /<Nginx 로그 디렉터리>"
 

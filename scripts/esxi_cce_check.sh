@@ -205,7 +205,7 @@ check_CSAP_ESXi_03() {
 check_CSAP_ESXi_05() {
     local status="양호"
     local detail=""
-    local cmd="/etc/init.d/ESXShell status ESXi Shell"
+    local cmd="/etc/init.d/ESXShell status 입력 후 ESXi Shell 활성화 여부 확인"
     local cur_state=""
     local remediation="[클라우드 가이드] [CLI] ￭ ESXi Shell 사용하지 않을 경우, 사용 제한 설정 # /etc/init.d/ESXShell ESXi Shell 비활성화 [vClient] ￭ ESXi Shell 사용하지 않을 경우, 사용 제한 설정 (ESXi 6.x 기준) vClient 실행 → ESXi 호스트 → 관리 → 서비스 → TSM과 TSM-SSH 항목을 오른쪽 클릭하여 \"중지\" [주요기반시설 가이드] ESXi Shell(TSM, TSM-SSH) 서비스가 비활성화 설정 [상세 조치 사례] l VMware ESXi Step 1) Web 콘솔 페이지 접속 > https://<VMware ESXi IP> Step 2) 호스트 > 관리 > 서비스로 이동 Step 3) TSM, TSM-SSH 서비스 활성화 여부 확인 [ TSM TSM-SSH 서비스 활성화 여부 확인 ] Step 4) TSM, TSM-SSH 서비스가 활성화되어 있는 경우, [중지] 클릭하여 서비스 중지 11. 가상화 장비 827"
 
@@ -266,7 +266,7 @@ check_CSAP_ESXi_05() {
 check_CSAP_ESXi_06() {
     local status="양호"
     local detail=""
-    local cmd="esxcli system settings advanced list -o /UserVars/ESXiShellTimeOut"
+    local cmd="esxcli system settings advanced list -o \"/UserVars/ESXiShellTimeOut\" 입력 후"
     local cur_state=""
     local remediation="[클라우드 가이드] [CLI] ￭ ESXi Shell 시간 초과 설정 # esxcli system settings advanced set -o /UserVars/ESXiShellTimeOut –i <원하는_대기시간_분 단위> 변경된 설정이 적용되도록 ESXi 호스트를 다시 부팅하거나, 변경된 설정을 즉시 적용하려면 다음 명령어 사용 # esxcli hardware reboot [vClient] ￭ ESXi Shell 시간 초과 설정 (ESXi 6.x 기준) vClient 실행 → 호스트 → 관리 → 시스템 → 고급설정 → UserVars.ESXiShellTimeOut에서 시간 변경(10분) [주요기반시설 가이드] Session Timeout 값(ESXiShellInteractiveTimeOut)이 900 이하 설정 [상세 조치 사례] l VMware ESXi Step 1) Web 콘솔 페이지 접속 > https://<VMware ESXi IP> Step 2) 관리 > 설정 > 시스템 > 고급 설정으로 이동 Step 3) UserVars.ESXiShellInteractiveTimeOut 설정값 확인 [ ESXiShellInteractiveTimeOut 설정값 확인 ] Step 4) 0 또는 600초(10분) 초과로 설정되어 있을 경우 [옵션 편집]을 클릭하여 아래와 같이 수정 [ 900 이하 설정 적용 ] 11. 가상화 장비 829"
 
@@ -331,7 +331,7 @@ check_CSAP_ESXi_06() {
 check_CSAP_ESXi_08() {
     local status="양호"
     local detail=""
-    local cmd="esxcli network vswitch standard policy security get -v vSwitch0"
+    local cmd="esxcli network vswitch standard policy security get -v \"vSwitch0\"(가상스위치"
     local cur_state=""
     local remediation="[클라우드 가이드] [CLI] ￭ 가상스위치 MAC 주소 변경정책 설정 # esxcli network vswitch standard policy security set -v vSwitch0(가상스위치 이름) -m false 입력 [vClient] ￭ 가상스위치 MAC 주소 변경정책 설정 (ESXi 6.x 기준) vClient 실행 → 호스트 → 네트워킹 → vSwitch0 → 보안 정책 → MAC 변경 허용 값 \"아니요\" 변경 [주요기반시설 가이드] 가상 스위치 MAC 주소 변경 정책 거부 설정 [상세 조치 사례] l VMware ESXi Step 1) Web 콘솔 페이지 접속 > https://<VMware ESXi IP> Step 2) 네트워킹 > 가상 스위치 > [가상 스위치 선택] > 설정 편집 > 보안으로 이동 Step 3) MAC 주소 변경 정책 설정 확인 Step 4) 허용으로 설정되어 있을 경우, '거부'로 변경 후 해당 설정 저장 [ MAC 주소 변경 정책 설정 확인 ] 846"
 
@@ -392,7 +392,7 @@ check_CSAP_ESXi_08() {
 check_CSAP_ESXi_09() {
     local status="양호"
     local detail=""
-    local cmd="esxcli network vswitch standard policy security get -v vSwitch0"
+    local cmd="esxcli network vswitch standard policy security get -v \"vSwitch0(가상스위치"
     local cur_state=""
     local remediation="[클라우드 가이드] [CLI] ￭ 가상스위치 Promiscuous 모드 정책 변경 # esxcli network vswitch standard policy security set -v \"vSwitch0(가상스위치 이름)\" -p false 입력 [vClient] ￭ 가상스위치 Promiscuous 모드 정책 변경 (ESXi 6.x 기준) vClient 실행 → 호스트 → 네트워킹 → vSwitch0 → 보안 정책 → \"비규칙 모드 허용\" 값을 \"아니요\" 변경 [주요기반시설 가이드] 가상 스위치 무차별(Promiscuous) 모드 정책 거부 설정 [상세 조치 사례] l VMware ESXi Step 1) Web 콘솔 페이지 접속 https://<VMware ESXi IP> Step 2) 네트워킹 > 가상 스위치 > [가상 스위치 선택] > 설정 편집 > 보안으로 이동 Step 3) 무차별 모드 정책 설정 확인 Step 4) 허용으로 설정되어 있을 경우, '거부'로 변경 후 해당 설정 저장 11. 가상화 장비 [ 무차별 모드 정책 설정 확인 ]"
 
@@ -453,7 +453,7 @@ check_CSAP_ESXi_09() {
 check_CSAP_ESXi_10() {
     local status="양호"
     local detail=""
-    local cmd="esxcli network vswitch standard policy security get -v vSwitch0"
+    local cmd="esxcli network vswitch standard policy security get -v \"vSwitch0\"(가상스위치"
     local cur_state=""
     local remediation="[클라우드 가이드] [CLI] ￭ 가상스위치 Forged Transmits 모드 정책 변경 # esxcli network vswitch standard policy security set -v \"vSwitch0(가상스위치 이름)\" -f false 입력 [vClient] ￭ 가상스위치 Forged Transmits 모드 정책 변경 (ESXi 6.x 기준) vClient 실행 → 호스트 → 네트워킹 → vSwitch0 → 보안 정책 → \"위조 전송 허용\" 값을 \"아니요\" 변경 [주요기반시설 가이드] 위조 전송(Forged Transmits) 모드 거부 설정 [상세 조치 사례] l VMware ESXi Step 1) Web 콘솔 페이지 접속 > https://<VMware ESXi IP> Step 2) 네트워킹 > 가상 스위치 > [가상 스위치 선택] > 설정 편집 > 보안으로 이동 Step 3) 위조 전송 정책 설정 확인 Step 4) 허용으로 설정되어 있을 경우, '거부'로 변경 후 해당 설정 저장 11. 가상화 장비 [위조 전송 정책 설정 확인 ] 850"
 
@@ -514,7 +514,7 @@ check_CSAP_ESXi_10() {
 check_CSAP_ESXi_13() {
     local status="양호"
     local detail=""
-    local cmd="esxcli system snmp get | grep Communities Communities; esxcli system snmp get; esxcli system snmp set --communities"
+    local cmd="esxcli system snmp get | grep Communities 입력 후 Communities 값 확인; esxcli system snmp get; cat /etc/vmware/snmp.xml | grep community | awk -F '\"' '{print \$4}'"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ Community String 값 변경 # esxcli system snmp set -c \"수정할 Community String 값\" 입력 [주요기반시설 가이드] SNMP Community String을 복잡도를 만족하는 값으로 설정 [상세 조치 사례] l VMware ESXi Step 1) SSH를 통해 ESXi 호스트 서버 접속 후, 다음 명령어 실행 \$ esxcli system snmp get Step 2) 다음 명령어를 사용해 Community String 값 설정 변경 \$ esxcli system snmp set --communities <변경 값> l VMware vCenter Step 1) SNMP 사용 확인 if [[ \$(vim-cmd proxysvc/service_list | grep 'TSM') ]]; then echo \"SNMP service is running on vcenter\" else echo \"SNMP service is not running on vcenter\" fi cat /etc/vmware/snmp.xml | grep community | awk -F '\"' '{print \$4}' Step 2) SNMP Community String 설정 확인 # /etc/snmpd.conf 파일에서 Community String 확인 # /usr/lib/vmware/vm-support/bin/nvpsvc -printconfig | grep –E \"SNMPCommunityString|SNMPAccessC ontrol\""
 
@@ -522,7 +522,7 @@ check_CSAP_ESXi_13() {
     output=$({
         ( get_process_snapshot "communities" )
         ( esxcli system snmp get )
-        ( esxcli system snmp set --communities )
+        ( get_process_snapshot "community" )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
 
@@ -577,7 +577,7 @@ check_CSAP_ESXi_13() {
 check_CSAP_ESXi_21() {
     local status="양호"
     local detail=""
-    local cmd="수동점검 필요"
+    local cmd="vim-cmd proxysvc/service_list 입력 후 확인"
     local cur_state=""
     local remediation="[클라우드 가이드] [CLI] ￭ MOB 비활성화 # vim-cmd proxysvc/remove_service \"/mob\" \"httpsWithRedirect\" 입력 [주요기반시설 가이드] MOB(Managed Object Browser)서비스 비활성화 설정 [상세 조치 사례] l VMware ESXi Step 1) Web 콘솔 페이지 접속 https://<VMware ESXi IP> Step 2) 호스트 > 관리 > 시스템 > 고급 설정으로 이동 Step 3) Config,HostAgent.plugins.solo.enableMob 설정값 확인 [ MOB 활성화 값 확인 ] 11. 가상화 장비 Step 4) 활성화(true)되어 있을 시, 해당 값을 false로 설정 [ MOB 비활성화 설정 적용 ] l VMware vCenter Step 1) vSphere Client 접속 후, 다음 메뉴에 접근하여 확인(vSphere Client 버전에 따라, 메뉴 명칭은 달라질 수 있음) # (vCenter6.5) \"호스트 및 클러스터\" > [vCenter 서버] > \"구성\" > \"설정\" > \"고급 설정\" > \"config.vpxd.enableDebugBrowse\" 확인 # (vCenter8) \"호스트 및 클러스터\" > [vCenter 서버] > \"구성\" > \"설정\" > \"고급 설정\" > \"config.vpxd.enableDebugBrowse\" 확인 826"
 
@@ -687,7 +687,7 @@ check_CSAP_ESXi_04() {
 check_CSAP_ESXi_07() {
     local status="양호"
     local detail=""
-    local cmd="esxcli system settings advanced list -o /UserVars/ESXiShellInteractiveTimeOut"
+    local cmd="esxcli system settings advanced list -o \"/UserVars/ESXiShellInteractiveTimeOut\""
     local cur_state=""
     local remediation="[CLI] ￭ 세션 타임아웃 설정 # esxcli system settings advanced set -o \"/UserVars/ESXiShellInteractiveTimeOut\" -i 600 (초 단위) 입력 변경된 설정이 적용되도록 ESXi 호스트를 다시 부팅하거나, 변경된 설정을 즉시 적용하려면 다음 명령어를 사용함 # esxcli hardware reboot [vClient] ￭ ESXi Shell 시간 초과 설정 (ESXi 6.x 기준) vClient 실행 → 호스트 → 관리 → 시스템 → 고급설정 → UserVars.ESXiShellInteractiveTimeOut에서 시간 설정 (초 단위)"
 
@@ -748,7 +748,7 @@ check_CSAP_ESXi_07() {
 check_CSAP_ESXi_11() {
     local status="양호"
     local detail=""
-    local cmd="cat /etc/ssh/sshd_config | grep PermitEmptyPasswords"
+    local cmd="cat /etc/ssh/sshd_config | grep PermitEmptyPasswords 입력 후"
     local cur_state=""
     local remediation="￭ ssh 빈 암호 인증 허용 사용 제한 설정 1. vi 편집기를 이용하여 /etc/ssh/sshd_config 파일을 연 후 # vi /etc/ssh/sshd_config 2. 아래와 같이 설정 변경 PermitEmptyPasswords no"
 
@@ -775,7 +775,7 @@ check_CSAP_ESXi_11() {
 check_CSAP_ESXi_12() {
     local status="양호"
     local detail=""
-    local cmd="esxcli system snmp get | grep Enable Enable"
+    local cmd="esxcli system snmp get | grep Enable 입력 후 Enable 값 확인"
     local cur_state=""
     local remediation="[CLI] ￭ SNMP 비활성화 설정 # esxcli system snmp set -e no 입력 [vClient] ￭ SNMP 비활성화 설정 vClient 실행 → 호스트 → 관리 → 서비스 → SNMP 중지 (ESXi 6.x 기준)"
 
@@ -836,7 +836,7 @@ check_CSAP_ESXi_12() {
 check_CSAP_ESXi_14() {
     local status="양호"
     local detail=""
-    local cmd="esxcli network firewall ruleset allowedip list IP"
+    local cmd="esxcli network firewall ruleset allowedip list 입력 후 IP 제한 설정 확인"
     local cur_state=""
     local remediation="[CLI] ￭ 서비스별 허용할 IP 설정 1. 해당 서비스에서 모든 IP 차단 # esxcli network firewall ruleset set --ruleset-id sshServer --allowed-all false 입력 2. 허용할 IP 설정 # esxcli network firewall ruleset allowedip add --ruleset-id sshServer --ip-address IP 주소 또는 대역 입력 [vClient]] ￭ 서비스별 허용할 IP 설정 vClient 실행 → 설정 → 보안 프로파일 → Firewall → 속성에서 각 서비스별 IP 제한 설정 ※ ESXi Shell에서 IP 제한 설정 시 설정할 서비스에서 모든 IP에 대해 deny 설정 후 허용할 IP 설정"
 
@@ -897,7 +897,7 @@ check_CSAP_ESXi_14() {
 check_CSAP_ESXi_15() {
     local status="양호"
     local detail=""
-    local cmd="esxcli network ip connection list 21 port proftpd"
+    local cmd="esxcli network ip connection list에서 21 port의 proftpd 확인"
     local cur_state=""
     local remediation="[CLI] ￭ FTP 구동 중지 # /etc/init.d/proftpd stop"
 
@@ -958,7 +958,7 @@ check_CSAP_ESXi_15() {
 check_CSAP_ESXi_16() {
     local status="양호"
     local detail=""
-    local cmd="cat /etc/proftpd.conf RootLogin"
+    local cmd="cat /etc/proftpd.conf에서 RootLogin확인"
     local cur_state=""
     local remediation="￭ FTP root 접속 제한 설정 1. vi 편집기를 이용하여 /etc/proftpd.conf 파일을 연 후 # vi /etc/proftpd.conf 2. 아래와 같이 설정 변경 RootLogin off"
 
@@ -1016,7 +1016,7 @@ check_CSAP_ESXi_16() {
 check_CSAP_ESXi_17() {
     local status="양호"
     local detail=""
-    local cmd="cat /etc/proftpd.conf DefaultRoot"
+    local cmd="cat /etc/proftpd.conf에서 DefaultRoot확인"
     local cur_state=""
     local remediation="￭ FTP root 접속 제한 설정 1. vi 편집기를 이용하여 /etc/proftpd.conf 파일을 연 후 # vi /etc/proftpd.conf 2. 아래와 같이 설정 변경 DefaultRoot /test(지정할 디렉터리 경로)"
 
@@ -1074,7 +1074,7 @@ check_CSAP_ESXi_17() {
 check_CSAP_ESXi_18() {
     local status="양호"
     local detail=""
-    local cmd="esxcli network ip connection list | grep ntpd ntp"
+    local cmd="esxcli network ip connection list | grep ntpd 입력 후 ntp 목록 확인"
     local cur_state=""
     local remediation="[CLI] ￭ NTP 활성화 vi 편집기를 이용하여 /etc/ntp.conf 파일에서 server time.bora.net(ntp 서버) 설정 # vi /etc/ntp.conf 2. NTP 데몬 시작 # /etc/init.d/ntpd start [vClient] ￭ NTP 활성화 vClient 실행 → 호스트 → 관리 → 서비스 → ntpd 활성화"
 
@@ -1196,7 +1196,7 @@ check_CSAP_ESXi_19() {
 check_CSAP_ESXi_20() {
     local status="양호"
     local detail=""
-    local cmd="esxcli software acceptance get"
+    local cmd="esxcli software acceptance get 입력 후 승인 레벨 확인"
     local cur_state=""
     local remediation="[CLI] ￭ 승인 레벨 변경 # esxcli software acceptance set --level PartnerSupported 입력 [vClient] ￭ 승인레벨변경 vClient 실행 → 호스트 → 관리 → 보안 및 사용자 → 수락 수준 설정 → Edit에서 변경"
 
@@ -1491,59 +1491,13 @@ check_ISMS_HV_08() {
 check_ISMS_HV_14() {
     local status="양호"
     local detail=""
-    local cmd="Syslog > Syslog"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="원격 로그 서버 또는 스토리지 연동 설정 [상세 조치 사례] l VMware ESXi Step 1) Web 콘솔 페이지 접속 https://<VMware ESXi IP> Step 2) 호스트 > 관리 > 시스템 > 고급 설정으로 이동 Step 3) Syslog.global.logHost 설정값 확인 [ Syslog.global.logHost 설정 값 확인 ] Step 4) [옵션 편집]을 클릭한 후 아래와 같은 양식으로 원격 로그 서버 또는 스토리지 입력 protocol://hostname|ipv4|'['ipv6']'[:port] [ Syslog.global.logHost 설정 ] ※ syslog 설정 예시 예시 설명 tcp://10.0.1.10:3555 TCP 및 Port 3555를 사용하여 Syslog 메시지를 10.0.1.10으로 전송 tcp://[2001:db8:85a3:8d 3:1319:8a2e:370:7348] TCP 및 Port 1514를 사용하여 Syslog 메시지를 IPv6 주소로 전송 udp://10.0.1.10 UDP 및 Port 514를 사용하여 Syslog 메시지를 10.0.1.10으로 전송 ssl://syslog.com SSL(TLS) 및 Port 514를 사용하여 Syslog 메시지를 syslog.com으로 전송 11. 가상화 장비 l VMware vCenter Step 1) Syslog 설정 여부를 확인 Step 2) vCenter Server 관리 페이지(https://<주소>:5480/) 접속 후, 다음 메뉴에 접근하여 확인(vCenter 버전에 따라, 메뉴 명칭은 달라질 수 있음) # \"Syslog\" > Syslog 설정 여부를 확인"
 
-    local output
-    output=$({
-        ( Syslog > Syslog )
-    } 2>/dev/null | sed '/^$/d' | head -20)
-    cur_state="$output"
-
-    if [ -z "$output" ]; then
-        status="양호"
-        detail="원격 로그 서버 또는 스토리지가 연동 설정된 경우"
-    else
-        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="해당 파일이 없으므로 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
-            local missing_text
-            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
-            status="수동점검"
-            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
-        else
-        if output_has_negative_marker "$output"; then
-            status="양호"
-            detail="원격 로그 서버 또는 스토리지가 연동 설정된 경우"
-        elif output_has_positive_marker "$output"; then
-            status="취약"
-            detail="원격 로그 서버 또는 스토리지가 연동 설정되지 않은 경우"
-        else
-            status="취약"
-            detail="원격 로그 서버 또는 스토리지가 연동 설정되지 않은 경우"
-        fi
-        fi
-    fi
-    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
+    status="수동점검"
+    detail="수동 점검 필요 항목입니다. 원격 로그 서버 또는 스토리지가 연동 설정된 경우"
+    cur_state="수동점검 필요"
 
     add_result "ISMS-HV-14" "가상화 장비 > 2. 시스템 서비스 관리" "원격 로그 서버 이용" "중" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
@@ -1582,15 +1536,14 @@ check_ISMS_HV_16() {
 check_ISMS_HV_17() {
     local status="양호"
     local detail=""
-    local cmd="esxcli system coredump network get; esxcli system coredump network set --interface-name --server-ipv4; esxcli system coredump network set --enable true"
+    local cmd="esxcli system coredump network get; esxcli system coredump network check"
     local cur_state=""
     local remediation="코어 덤프 수집 기능 활성화 적용 [상세 조치 사례] l VMware ESXi Step 1) SSH를 통해 ESXi 호스트 서버 접속 후, 다음 명령어 실행 \$ esxcli system coredump network get Step 2) 다음 명령어를 사용해 VMkernel 네트워크 인터페이스와 원격 네트워크 코어 덤프 서버의 IP주소 및 UDP Port 번호 지정 \$ esxcli system coredump network set --interface-name <VMkernel 인터페이스명> --server-ipv4 <IP주소> --server-port <Port 번호> 예시) esxcli system coredump network set --interface-name vmk0 --server-ipv4 10.0.1.10 --server-port Step 3) 다음 명령어를 사용해 네트워크 코어 덤프 구성 활성화 \$ esxcli system coredump network set --enable true Step 4) 코어 덤프 수집 기능 활성화 여부 확인 \$ esxcli system coredump network check 838"
 
     local output
     output=$({
         ( esxcli system coredump network get )
-        ( esxcli system coredump network set --interface-name --server-ipv4 )
-        ( esxcli system coredump network set --enable true )
+        ( esxcli system coredump network check )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
 

@@ -247,7 +247,7 @@ fi
 check_CSAP_Ceph_01() {
     local status="양호"
     local detail=""
-    local cmd="ls /keyring; ls -l /etc/ceph/*.keyring"
+    local cmd="ls [keyring 파일 디렉터리]/keyring 파일; ls -l /etc/ceph/*.keyring"
     local cur_state=""
     local remediation="￭ Keyring 소유자 및 파일 권한 변경 1) # chown root:root [keyring 파일 디렉터리]/keyring 파일 2) # chmod 400 [keyring 파일 디렉터리]/keyring 파일"
 
@@ -369,7 +369,7 @@ check_CSAP_Ceph_02() {
 check_CSAP_Ceph_03() {
     local status="양호"
     local detail=""
-    local cmd="ls -l /ceph.conf"
+    local cmd="ls -l [Ceph 설정 디렉터리]/ceph.conf"
     local cur_state=""
     local remediation="￭ Ceph 설정 파일 권한 변경 1) # chmod o-w [Ceph 설정 디렉터리]/ceph.conf"
 
@@ -418,7 +418,7 @@ check_CSAP_Ceph_03() {
 check_CSAP_Ceph_04() {
     local status="양호"
     local detail=""
-    local cmd="cat /ceph.conf"
+    local cmd="cat [Ceph 설정 디렉터리]/ceph.conf"
     local cur_state=""
     local remediation="￭ 설정 파일에서 [global] 영역에 CEPHX 프로토콜 적용 1) # vi [Ceph 설정 디렉터리]/ceph.conf"
 

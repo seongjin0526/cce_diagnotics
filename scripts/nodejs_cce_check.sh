@@ -258,7 +258,7 @@ fi
 check_CSAP_NodeJS_01() {
     local status="양호"
     local detail=""
-    local cmd="ps -ef | grep node | grep -v grep"
+    local cmd="ps -ef | grep node | grep -v grep; app.js | grep \"process.env.NODE_ENV\""
     local cur_state=""
     local remediation="￭ root 계정 이외의 계정으로 node 프로세스 실행 1) # set DEBU=www & npm start dev ￭ production 모드로 변경 1) # export NODE_ENV=production"
 
@@ -450,7 +450,7 @@ check_CSAP_NodeJS_03() {
 check_CSAP_NodeJS_04() {
     local status="양호"
     local detail=""
-    local cmd="ls -ld; ls -ld"
+    local cmd="ls -ld [node 애플리케이션 로그 디렉터리]; ls -ld [node 애플리케이션 로그 파일]"
     local cur_state=""
     local remediation="￭ 로그 디렉터리 및 로그 파일 접근 권한 변경 1) 로그 디렉터리 접근 권한 변경 # chown nodeLnode [node 애플리케이션 로그 디렉터리] # chown 750 [node 애플리케이션 로그 디렉터리] ￭ 로그 파일 접근 권한 변경 # chown node:node [node 애플리케이션 로그 파일] # chmod 640 [node 애플리케이션 로그 디렉터리]"
 
@@ -637,15 +637,14 @@ check_CSAP_NodeJS_06() {
 check_CSAP_NodeJS_07() {
     local status="양호"
     local detail=""
-    local cmd="rpm -qa | grep nodejs; node -v; npm -v"
+    local cmd="npm -v; express --version"
     local cur_state=""
     local remediation="￭ Node.js 사이트를 통해 주기적으로 버전 점검을 하도록 하며 최신 보안 패치 적용 시 충분한 테스트 후 적용 ￭ NPM 최신 보안 패치 업데이트 1) npm 업데이트 # npm install –g npm 2) 업데이트 후 npm 버전 확인 ￭ Express 최신 버전 업데이트 # npm install express"
 
     local output
     output=$({
-        ( get_process_snapshot "nodejs" )
-        ( node -v )
         ( npm -v )
+        ( express --version )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
 

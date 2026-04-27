@@ -253,7 +253,7 @@ fi
 check_CSAP_PHP_01() {
     local status="양호"
     local detail=""
-    local cmd="cat //php.ini | grep display_errors"
+    local cmd="cat /[PHP 설치 디렉터리]/php.ini | grep display_errors"
     local cur_state=""
     local remediation="￭ PHP 설정 파일에서 수정 1) # vi /[PHP 설치 디렉터리]/php.ini display_errors = Off"
 
@@ -323,7 +323,7 @@ check_CSAP_PHP_01() {
 check_CSAP_PHP_02() {
     local status="양호"
     local detail=""
-    local cmd="cat //php.ini | grep expose_php"
+    local cmd="cat /[PHP 설치 디렉터리]/php.ini | grep expose_php"
     local cur_state=""
     local remediation="￭ PHP 설정 파일에서 수정 1) # vi /[PHP 설치 디렉터리]/php.ini expose_php = Off"
 
@@ -393,7 +393,7 @@ check_CSAP_PHP_02() {
 check_CSAP_PHP_03() {
     local status="양호"
     local detail=""
-    local cmd="cat //php.ini | grep allow_url_fopen"
+    local cmd="cat /[PHP 설치 디렉터리]/php.ini | grep allow_url_fopen"
     local cur_state=""
     local remediation="￭ PHP 설정 파일에서 수정 1) # vi /[PHP 설치 디렉터리]/php.ini expose_php = Off"
 
@@ -463,7 +463,7 @@ check_CSAP_PHP_03() {
 check_CSAP_PHP_04() {
     local status="양호"
     local detail=""
-    local cmd="cat //php.ini | grep disable_functions; exec -"
+    local cmd="cat /[PHP 설치 디렉터리]/php.ini | grep disable_functions; exec - 외부 프로그램을 실행하는 함수로 쉘 명령어 사용 가능"
     local cur_state=""
     local remediation="￭ PHP 설정 파일에서 수정 1) # vi /[PHP 설치 디렉터리]/php.ini 예시) disable_functions = exec, passthru, shell_exec, system, proc_open, popen, curl_exec, curl_multi_exec, parse_ini_file, show_source"
 
@@ -533,7 +533,7 @@ check_CSAP_PHP_04() {
 check_CSAP_PHP_05() {
     local status="양호"
     local detail=""
-    local cmd="cat //php.ini | grep open_basedir"
+    local cmd="cat /[PHP 설치 디렉터리]/php.ini | grep open_basedir"
     local cur_state=""
     local remediation="￭ PHP 설정 파일에서 수정 1) # vi /[PHP 설치 디렉터리]/php.ini"
 

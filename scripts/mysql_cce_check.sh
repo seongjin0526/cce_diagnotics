@@ -284,7 +284,7 @@ fi
 check_CSAP_MY_SQL_05() {
     local status="양호"
     local detail=""
-    local cmd="ps -ef | grep mysqld"
+    local cmd="ps -ef | grep mysqld; cat [mysql server configuration 파일 위치] | grep user; cat [mysql server configuration 파일 위치] | grep user (user=mysql로 설정되어 있으면 양호)"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ mysql server configuration 파일에서 [mysqld] 그룹의 'user' 지시자 설정 1) # vi [mysql server configuration 파일 위치] 2) user = <mysqld를 구동할 시스템의 일반 사용자 계정> [주요기반시설 가이드] DBMS 구동 계정 변경 [상세 조치 사례] l MySQL Step 1) 실행 중인 프로세스를 통한 확인 # ps –ef | grep mysqld Step 2) mysql server configuration 파일에서 [mysqld] 그룹의 'user' 지시자의 설정값 확인 # cat [mysql server configuration 파일 위치] | grep user (user=mysql로 설정되어 있으면 양호) Step 3) mysql server configuration 파일에서 [mysqld] 그룹의 'user' 지시자 설정 # vi [mysql server configuration 파일 위치] (일반적으로 /etc/my.cnf.d/mysql-server.cnf) ※ user = [mysqld를 구동할 시스템의 일반 사용자 계정]"
 
@@ -345,7 +345,7 @@ check_CSAP_MY_SQL_05() {
 check_CSAP_MY_SQL_07() {
     local status="양호"
     local detail=""
-    local cmd="mysql> SELECT host, user, plugin, authentication_string FROM user;; mysql> SELECT user, host, plugin FROM mysql.user;; mysql> SELECT host, user, plugin, password AS authentication_string FROM mysql.user;"
+    local cmd="mysql> SELECT host, user, plugin, authentication_string FROM user;; mysql> SELECT user, host, plugin FROM mysql.user; 또는; mysql> SELECT host, user, plugin, password AS authentication_string FROM mysql.user;"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ 안전한 패스워드 암호화 알고리즘 사용 1) mysql> ALTER user '사용자 계정 이름'@'localhost' IDENTIFIED WITH caching_sha2_password BY '패스워드'; 2) mysql> FLUSH privileges; [주요기반시설 가이드] SHA-256 이상의 암호화 알고리즘 적용 [상세 조치 사례] l MySQL Step 1) 계정별 암호화 알고리즘 확인 [mysql 5.7] mysql> SELECT user, host, plugin FROM mysql.user; 또는 mysql> SELECT host, user, plugin, password AS authentication_string FROM mysql.user; [mysql 8.0] 08. DBMS mysql> SELECT user, host, plugin FROM mysql.user; 또는 mysql> SELECT host, user, plugin, authentication_string FROM mysql.user; Step 2) 비밀번호 및 암호화 알고리즘 설정 [mysql 5.7] - user 생성 시 적용 CREATE USER '계정명'@'host' IDENTIFIED BY '비밀번호'; - 기존 user 적용 ALTER USER '계정명'@'host' IDENTIFIED '신규 비밀번호'; ※ mysql 5.7에서는 기본적으로 mysql_native_password 플러그인이 사용되므로 별도의 지정이 필요하지 않음 [mysql 8.0] - user 생성 시 적용 mysql> CREATE USER '계정명'@'localhost' IDENTIFIED WITH caching_sha2_password BY '비밀번호'; - 기존 user 적용 mysql> ALTER USER '계정명'@'localhost' IDENTIFIED WITH caching_sha2_password BY '비밀번호'; ※ mysql v8.0 이상부터 암호화 알고리즘으로 caching_sha2_password(SHA-256)가 적용됨 ※ mysql v5.7 버전에서 사용하던 데이터베이스를 8.0으로 업그레이드하여 mysql_native_password 플러그인이 유 지되는 경우 위와 같이 caching_sha2_password 알고리즘을 지정하여 적용할 수 있음"
 
@@ -461,7 +461,7 @@ check_CSAP_MY_SQL_01() {
 check_CSAP_MY_SQL_02() {
     local status="양호"
     local detail=""
-    local cmd="mysql> INSTALL COMPONENT file://component_validate_password;; mysql> SHOW VARIABLES LIKE validate_password%;"
+    local cmd="mysql> INSTALL COMPONENT 'file://component_validate_password';; mysql> SHOW VARIABLES LIKE 'validate_password%';"
     local cur_state=""
     local remediation="￭ validate_password 패스워드 정책 (예시) 1) mysql server configuration 파일에서 아래의 내용으로 수정 # vi /etc/mysql/mysql.conf.d/mysqld.cnf validate_password.length=8 validate_password.mixed_case_count=1 validate_password.number_count=1 validate_password.special_char_count=1 validate_password.policy=MEDIUM 또는 STRONG 2) # service mysql restart 3) mysql> SHOW VARIABLES LIKE 'validate_password%';"
 
@@ -522,13 +522,13 @@ check_CSAP_MY_SQL_02() {
 check_CSAP_MY_SQL_03() {
     local status="양호"
     local detail=""
-    local cmd="mysql> USE mysql;; mysql> SELECT host, user, Grant_priv FROM user WHERE Grant_priv=Y;"
+    local cmd="mysql> USE mysql;; mysql> SELECT host, user, Grant_priv FROM user WHERE Grant_priv='Y';"
     local cur_state=""
     local remediation="￭ 불필요한 grant_priv 권한 제거 1) mysql> USE mysql; 2) mysql> REVOKE grant option ON *.* FROM '권한 제거 사용자 계정명'@'접속 IP'; 3) mysql> FLUSH privileges;"
 
     local output
     output=$({
-        ( run_mysql_query "SELECT host, user, Grant_priv FROM mysql.user WHERE Grant_priv=Y;" )
+        ( run_mysql_query "SELECT host, user, Grant_priv FROM mysql.user WHERE Grant_priv='Y';" )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
 
@@ -636,7 +636,7 @@ check_CSAP_MY_SQL_04() {
 check_CSAP_MY_SQL_06() {
     local status="양호"
     local detail=""
-    local cmd="ls -alL"
+    local cmd="ls -alL [mysql server configuration 파일 위치]"
     local cur_state=""
     local remediation="￭ mysql server configuration 파일 접근 권한 변경 1) # chmod 640 [mysql server configuration 파일 위치]"
 
@@ -685,7 +685,7 @@ check_CSAP_MY_SQL_06() {
 check_CSAP_MY_SQL_08() {
     local status="양호"
     local detail=""
-    local cmd="mysql> SHOW VARIABLES LIKE general_log%;; mysql> SHOW VARIABLES LIKE slow%;"
+    local cmd="mysql> SHOW VARIABLES LIKE 'general_log%';; mysql> SHOW VARIABLES LIKE 'slow%';"
     local cur_state=""
     local remediation="￭ General log 설정 1) # vi [mysql server configuration 파일] general_log = 1; 2) # vi [mysql server configuration 파일] general_log_file 경로 설정 ￭ Slow log 설정 1) # vi [mysql server configuration 파일] slow_query_log = 1; 2) # vi [mysql server configuration 파일] slow_launch_time 설정 3) # vi [mysql server configuration 파일] slow_query_log_file 경로 설정"
 
@@ -802,7 +802,7 @@ check_CSAP_MY_SQL_09() {
 check_ISMS_D_01() {
     local status="양호"
     local detail=""
-    local cmd="mysql> UPDATE user SET authentication_string = PASSWORD WHERE User = 'root';; mysql> flush privileges;; mysql> ALTER USER 'root'@'localhost' IDENTIFIED BY ' ';"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="기본(관리자) 계정의 초기 비밀번호 및 권한 정책 변경 [상세 조치 사례] l MySQL Step 1) root 계정 비밀번호 변경 [mysql 5.7] mysql> UPDATE user SET authentication_string = PASSWORD('신규 비밀번호') WHERE User = 'root'; mysql> flush privileges; [mysql 8.0] mysql> ALTER USER 'root'@'localhost' IDENTIFIED BY '신규 비밀번호'; User Password User Password scott tiger or tigger system manager dbsnmp dbsnmp sys changeon_install tracesvr trace outln outln ordplugins ordplugins ordsys ordsys ctxsys ctxsys mdsys mdsys adams wood blake papr clark clth jones steel lbacsys lbacsys - - mysql> flush privileges;"
 
@@ -851,7 +851,7 @@ check_ISMS_D_02() {
 check_ISMS_D_03() {
     local status="양호"
     local detail=""
-    local cmd="mysql> SHOW VARIABLES LIKE 'validate_password%';; mysql> INSTALL COMPONENT 'file://component_validate_password';; mysql> SHOW VARIABLES LIKE 'default_password_lifetime';"
+    local cmd="mysql> SHOW VARIABLES LIKE 'validate_password%';; mysql> SHOW VARIABLES LIKE 'default_password_lifetime';; mysql> SET GLOBAL default_password_lifetime=90;"
     local cur_state=""
     local remediation="기관 정책에 맞게 비밀번호 사용 기간 및 복잡도 정책 설정 [상세 조치 사례] l MySQL [비밀번호 복잡도 정책 설정] Step 1) 비밀번호 정책 확인 08. DBMS mysql> SHOW VARIABLES LIKE 'validate_password%'; ※ component_validate_password가 설치되어 있지 않은 경우 아래와 같이 해당 컴포넌트 설치 mysql> INSTALL COMPONENT 'file://component_validate_password'; Step 2) 비밀번호 정책 설정 다음과 같은 방법으로 각각의 비밀번호 정책을 설정 SET GLOBAL validate_password.policy = 'MEDIUM'; (비밀번호 정책의 강도 LOW/MEDIUM/STRONG) SET GLOBAL validate_password.length = 8; (비밀번호 최소 길이) SET GLOBAL validate_password.mixed_case_count = 1; (포함되어야 하는 영문 대소문자 최소 개수) SET GLOBAL validate_password.number_count = 1; (포함되어야 하는 숫자 최소 개수) SET GLOBAL validate_password.special_char_count = 1; (포함되어야 하는 특수문자 최소 개수) ※ Linux계열(/etc/my.cnf 또는 /etc/mysql/my.cnf), Windows(C:\\ProgramData\\MySQL\\MySQL Server <설치된 버전>\\my.ini)의 <mysqld> 섹션에 설정을 추가하여 정책 설정 가능 ※ 비밀번호 신규 적용 및 초기화 시 설정 규칙에 맞추어 관리하고, 저장 시에는 일방향 암호화 알고리즘을 통해 암호화 처리(One-Way Encryption)함 [비밀번호 LifeTime 정책 적용 ] Step 1) 비밀번호 정책 확인 mysql> SHOW VARIABLES LIKE 'default_password_lifetime'; Step 2) 비밀번호 LifeTime 설정 mysql> SET GLOBAL default_password_lifetime=90; ※ 기본 값 - 5.7.11 이전 버전 : 0 - 5.7.11 이후 버전 및 8.0 이후 버전 : 360 Step 3) 정책 적용전에 생성된 계정의 LifeTime 변경 mysql> ALTER USER <계정명>'@'<호스트명 or IP>' PASSWORD EXPIRE INTERVAL 91 DAY;"
 
@@ -936,7 +936,7 @@ check_ISMS_D_04() {
 check_ISMS_D_06() {
     local status="양호"
     local detail=""
-    local cmd="mysql> DROP USER @; mysql> create user ''@'' identified by '';; mysql> grant select, insert on DB. to ''@'';"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="사용자별 계정 생성 및 권한 부여 [상세 조치 사례] l MySQL Step 1) 공용용 계정 삭제 mysql> DROP USER <계정명>@<호스트명 or IP> Step 2) 사용자별, 응용 프로그램별 계정 생성 및 권한 설정 // 사용자 계정 생성 mysql> create user '<계정명>'@'<호스트명 or IP>' identified by '비밀번호'; // 특정 데이터베이스의 특정 테이블에 select, insert 권한을 부여 mysql> grant select, insert on DB이름.테이블명 to '<계정명>'@'<호스트명 or IP>'; // 특정 데이터베이스의 모든 테이블에 모든 권한을 부여 mysql> grant all privileges on DB이름.* to '<계정명>'@'<호스트명 or IP>'; mysql> flush privileges; ※ 모든 권한을 부여할 경우, 해당 사용자는 지정된 데이터베이스에서 모든 작업의 수행이 가능하므로 사용자의 관리적 측면에서는 편리하나, 보안적 측면에서는 필요한 최소한의 권한만 부여하여 안정성을 높여야 함"
 
@@ -962,7 +962,7 @@ check_ISMS_D_06() {
 check_ISMS_D_10() {
     local status="양호"
     local detail=""
-    local cmd="mysql> UPDATE user SET host = '' WHERE user ='' and host='%';"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="DB 서버에 대해 지정된 IP주소에서만 접근 가능하도록 설정 [상세 조치 사례] l MySQL Step 1) user 테이블을 조회하여 모든 클리이언트에서 접속 가능하도록 설정되어 있는 계정을 특정 IP에서만 접 속 가능하도록 변경 mysql> UPDATE user SET host = '<접속 IP>' WHERE user ='<계정명>' and host='%'; 630"
 
@@ -985,7 +985,7 @@ check_ISMS_D_10() {
 check_ISMS_D_11() {
     local status="양호"
     local detail=""
-    local cmd="SHOW GRANTS FOR ;"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="시스템 테이블에 일반 사용자 계정이 접근할 수 없도록 설정 [상세 조치 사례] l MySQL Step 1) 사용자 계정에 부여된 권한 확인 SHOW GRANTS FOR <계정명>; Step 2) 접근이 필요한 데이터베이스 및 테이블에만 권한 적용 GRANT <권한> privileges ON <DB명>.<테이블명> to '<계정명>'@'<호스트명 or IP>';"
 
@@ -1011,7 +1011,7 @@ check_ISMS_D_11() {
 check_ISMS_D_21() {
     local status="양호"
     local detail=""
-    local cmd="SELECT user, grant_priv FROM mysql.user;"
+    local cmd="SELECT user, grant_priv FROM mysql.user; (계정이 나오는 경우 취약)"
     local cur_state=""
     local remediation="WITH_GRANT_OPTION이 ROLE에 의하여 설정되도록 변경 [상세 조치 사례] l l MySQL Step 1) 설정 확인 08. DBMS SELECT user, grant_priv FROM mysql.user; (계정이 나오는 경우 취약) Step 2) 권한 회수 REVOKE <권한> ON <대상> FROM [계정명];"
 

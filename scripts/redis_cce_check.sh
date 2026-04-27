@@ -287,11 +287,10 @@ fi
 check_CSAP_Redis_01() {
     local status="양호"
     local detail=""
-    local cmd="run_redis_cli \"CONFIG GET requirepass\"; cfg=\${REDIS_CONF:-/etc/redis/redis.conf}; if [ -f \"\$cfg\" ]; then out=\$(grep -Ein \"^[[:space:]]*requirepass\" \"\$cfg\" 2>/dev/null | head -20); if [ -n \"\$out\" ]; then printf '%s\\n' \"\$out\"; else echo \"SETTING_DEFAULT_BAD|기본값은 인증 비밀번호 미설정입니다.\"; fi; else echo \"FILE_DEFAULT_BAD|기본값은 인증 비밀번호 미설정입니다.\"; fi"
+    local cmd="cat [redis 디렉터리/redis.conf] | grep -i requirepass"
     local cur_state=""
     local remediation="￭ redis.conf 파일 안의 requirepass 설정 1) # vi /etc/redis/redis.conf 2) requirepass 값 설정 3) 인증 로그인 확인"
 
-    cmd="run_redis_cli \"CONFIG GET requirepass\"; grep -Ein \"^[[:space:]]*requirepass\" ${REDIS_CONF:-/etc/redis/redis.conf}"
     local output
     output=$({ ( run_redis_cli "CONFIG GET requirepass" ); ( cfg="${REDIS_CONF:-/etc/redis/redis.conf}"; [ -f "$cfg" ] && grep -Ein "^[[:space:]]*requirepass" "$cfg" 2>/dev/null || echo "FILE_DEFAULT_BAD|기본값은 인증 비밀번호 미설정입니다." ); } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="${output:-결과 없음}"
@@ -316,7 +315,7 @@ check_CSAP_Redis_01() {
 check_CSAP_Redis_02() {
     local status="양호"
     local detail=""
-    local cmd="cat [redis /redis.conf | grep -i bind"
+    local cmd="cat [redis 디렉터리/redis.conf | grep -i bind"
     local cur_state=""
     local remediation="￭ redis.conf 파일 안의 bind 설정 1) # vi [redis 디렉터리/redis.conf] (인가된 IP만 접근 가능하도록 설정)"
 
@@ -383,7 +382,7 @@ check_CSAP_Redis_02() {
 check_CSAP_Redis_03() {
     local status="양호"
     local detail=""
-    local cmd="cat /redis.conf | grep -i replica-read-only"
+    local cmd="cat [redis 디렉터리]/redis.conf | grep -i replica-read-only"
     local cur_state=""
     local remediation="￭ redis.conf 파일 내 replica-read-only 설정 1) # vi [redis 디렉터리]/redis.conf replica-read-only를 yes로 변경"
 
@@ -450,7 +449,7 @@ check_CSAP_Redis_03() {
 check_CSAP_Redis_04() {
     local status="양호"
     local detail=""
-    local cmd="cat /redis.conf | grep -i rename-command"
+    local cmd="cat [redis 디렉터리]/redis.conf | grep -i rename-command"
     local cur_state=""
     local remediation="￭ redis.conf 파일 안의 rename-command CONFIG 설정 1) # vi [redis 디렉터리]/redis.conf rename-command CONFIG \"\" 주석 처리 해제"
 
@@ -520,7 +519,7 @@ check_CSAP_Redis_04() {
 check_CSAP_Redis_05() {
     local status="양호"
     local detail=""
-    local cmd="ls -ld"
+    local cmd="ls -ld [redis 데이터 디렉터리]"
     local cur_state=""
     local remediation="￭ redis 데이터 디렉터리 접근 권한 750으로 설정 1) # chmod 750 [redis 데이터 디렉터리]"
 
@@ -569,7 +568,7 @@ check_CSAP_Redis_05() {
 check_CSAP_Redis_06() {
     local status="양호"
     local detail=""
-    local cmd="ls -al /redis.conf"
+    local cmd="ls -al [redis 디렉터리]/redis.conf"
     local cur_state=""
     local remediation="￭ redis.conf 파일의 권한을 600 이하로 설정 1) # chmod 600 [redis 데이터디렉터리]/redis.conf"
 
@@ -644,7 +643,7 @@ check_CSAP_Redis_07() {
 check_CSAP_Redis_08() {
     local status="양호"
     local detail=""
-    local cmd="redis-cli -h 127.0.0.1 -p 6379; /redis-cli -v"
+    local cmd="redis-cli -h 127.0.0.1 -p 6379; [redis 디렉터리]/redis-cli -v"
     local cur_state=""
     local remediation="￭ 보안 패치 적용 1) 취약점이 없는 보안 패치가 적용된 버전으로 업데이트해야 함 ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
 

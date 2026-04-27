@@ -256,10 +256,9 @@ check_CSAP_Docker_02() {
     local cur_state=""
     local remediation="￭ 도커 그룹에서 불필요한 사용자 제거 1) # vi /etc/group 입력 후, 불필요한 사용자 계정 제거 ￭ 도커 그룹 이름이 dockerroot인 경우 1) root 그룹, dockerroot 그룹 모두 불필요한 사용자 계정 제거 # vi /etc/group"
 
-    cmd="getent group docker dockerroot root; grep -E \"^(docker|dockerroot|root):\" /etc/group"
     local group_output
     local extra_members
-    group_output=$({ getent group docker dockerroot root 2>/dev/null; grep -E "^(docker|dockerroot|root):" /etc/group 2>/dev/null; } | awk -F: '!seen[$1]++' | head -20)
+    group_output=$({ cat /etc/group 2>/dev/null | grep docker; cat /etc/group 2>/dev/null | grep root; } | awk -F: '!seen[$1]++' | head -20)
     cur_state="${group_output:-그룹 정보 없음}"
     extra_members=$(printf '%s\n' "$group_output" | awk -F: '$1=="docker" || $1=="dockerroot" || $1=="root" { n=split($4, members, ","); for (i=1; i<=n; i++) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", members[i]); if (members[i] != "" && members[i] != "root" && !seen[members[i]]++) { if (out != "") out=out ","; out=out members[i]; } } } END { print out }')
     if [ -n "$extra_members" ]; then
@@ -277,14 +276,13 @@ check_CSAP_Docker_02() {
 check_CSAP_Docker_03() {
     local status="양호"
     local detail=""
-    local cmd="auditctl -l | grep /usr/bin/docker"
+    local cmd="auditctl -l | grep /usr/bin/docker; cat [audit.rules 파일 위치] | grep /usr/bin/docker"
     local cur_state=""
     local remediation="￭ audit 설정 적용 1) auditd 설치 2) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 3) audit 데몬 재시작 # service auditd restart"
 
-    cmd="auditctl -l | grep -F -- \"/usr/bin/docker\"; grep -RhsF -- \"/usr/bin/docker\" /etc/audit/rules.d /etc/audit/audit.rules"
     local audit_target="/usr/bin/docker"
     local output
-    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; grep -RhsF -- "$audit_target" /etc/audit/rules.d /etc/audit/audit.rules 2>/dev/null; } | sed '/^$/d' | head -20)
+    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; cat /etc/audit/audit.rules /etc/audit/rules.d/*.rules 2>/dev/null | grep -F -- "$audit_target"; } | sed '/^$/d' | head -20)
     cur_state="${output:-감사 규칙 없음}"
     if [ -n "$output" ]; then
         status="양호"
@@ -301,14 +299,13 @@ check_CSAP_Docker_03() {
 check_CSAP_Docker_04() {
     local status="양호"
     local detail=""
-    local cmd="auditctl -l | grep /var/lib/docker"
+    local cmd="auditctl -l | grep /var/lib/docker; cat [audit.rules 파일 위치] | grep /var/lib/docker"
     local cur_state=""
     local remediation="￭ audit 설정 적용 1) auditd 설치 2) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 3) audit 데몬 재시작 # service auditd restart"
 
-    cmd="auditctl -l | grep -F -- \"/var/lib/docker\"; grep -RhsF -- \"/var/lib/docker\" /etc/audit/rules.d /etc/audit/audit.rules"
     local audit_target="/var/lib/docker"
     local output
-    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; grep -RhsF -- "$audit_target" /etc/audit/rules.d /etc/audit/audit.rules 2>/dev/null; } | sed '/^$/d' | head -20)
+    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; cat /etc/audit/audit.rules /etc/audit/rules.d/*.rules 2>/dev/null | grep -F -- "$audit_target"; } | sed '/^$/d' | head -20)
     cur_state="${output:-감사 규칙 없음}"
     if [ -n "$output" ]; then
         status="양호"
@@ -325,14 +322,13 @@ check_CSAP_Docker_04() {
 check_CSAP_Docker_05() {
     local status="양호"
     local detail=""
-    local cmd="auditctl -l | grep /etc/docker"
+    local cmd="auditctl -l | grep /etc/docker; cat [audit.rules 파일 위치] | grep /etc/docker"
     local cur_state=""
     local remediation="￭ audit 설정 적용 1) auditd 설치 2) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 3) audit 데몬 재시작 # service auditd restart"
 
-    cmd="auditctl -l | grep -F -- \"/etc/docker\"; grep -RhsF -- \"/etc/docker\" /etc/audit/rules.d /etc/audit/audit.rules"
     local audit_target="/etc/docker"
     local output
-    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; grep -RhsF -- "$audit_target" /etc/audit/rules.d /etc/audit/audit.rules 2>/dev/null; } | sed '/^$/d' | head -20)
+    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; cat /etc/audit/audit.rules /etc/audit/rules.d/*.rules 2>/dev/null | grep -F -- "$audit_target"; } | sed '/^$/d' | head -20)
     cur_state="${output:-감사 규칙 없음}"
     if [ -n "$output" ]; then
         status="양호"
@@ -349,14 +345,13 @@ check_CSAP_Docker_05() {
 check_CSAP_Docker_06() {
     local status="양호"
     local detail=""
-    local cmd="auditctl -l | grep /lib/systemd/system/docker.service"
+    local cmd="auditctl -l | grep /lib/systemd/system/docker.service; cat [audit.rules 파일 위치] | /lib/systemd/system/docker.service"
     local cur_state=""
     local remediation="￭ audit 설정 적용 1) auditd 설치 2) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 3) audit 데몬 재시작 # service auditd restart"
 
-    cmd="auditctl -l | grep -F -- \"/lib/systemd/system/docker.service\"; grep -RhsF -- \"/lib/systemd/system/docker.service\" /etc/audit/rules.d /etc/audit/audit.rules"
     local audit_target="/lib/systemd/system/docker.service"
     local output
-    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; grep -RhsF -- "$audit_target" /etc/audit/rules.d /etc/audit/audit.rules 2>/dev/null; } | sed '/^$/d' | head -20)
+    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; cat /etc/audit/audit.rules /etc/audit/rules.d/*.rules 2>/dev/null | grep -F -- "$audit_target"; } | sed '/^$/d' | head -20)
     cur_state="${output:-감사 규칙 없음}"
     if [ -n "$output" ]; then
         status="양호"
@@ -373,14 +368,13 @@ check_CSAP_Docker_06() {
 check_CSAP_Docker_07() {
     local status="양호"
     local detail=""
-    local cmd="auditctl -l | grep /lib/systemd/system/docker.socket"
+    local cmd="auditctl -l | grep /lib/systemd/system/docker.socket; cat [audit.rules 파일 위치] | /lib/systemd/system/docker.socket"
     local cur_state=""
     local remediation="￭ audit 설정 적용 1) auditd 설치 2) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 3) audit 데몬 재시작 # service auditd restart"
 
-    cmd="auditctl -l | grep -F -- \"/lib/systemd/system/docker.socket\"; grep -RhsF -- \"/lib/systemd/system/docker.socket\" /etc/audit/rules.d /etc/audit/audit.rules"
     local audit_target="/lib/systemd/system/docker.socket"
     local output
-    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; grep -RhsF -- "$audit_target" /etc/audit/rules.d /etc/audit/audit.rules 2>/dev/null; } | sed '/^$/d' | head -20)
+    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; cat /etc/audit/audit.rules /etc/audit/rules.d/*.rules 2>/dev/null | grep -F -- "$audit_target"; } | sed '/^$/d' | head -20)
     cur_state="${output:-감사 규칙 없음}"
     if [ -n "$output" ]; then
         status="양호"
@@ -397,14 +391,13 @@ check_CSAP_Docker_07() {
 check_CSAP_Docker_08() {
     local status="양호"
     local detail=""
-    local cmd="auditctl -l | grep /etc/default/docker"
+    local cmd="auditctl -l | grep /etc/default/docker; cat [audit.rules 파일 위치] | /etc/default/docker"
     local cur_state=""
     local remediation="￭ audit 설정 적용 1) auditd 설치 2) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 (Debian 계열) 2) /etc/audit/rules.d/audit.rules 파일에 아래의 내용 추가 (RedHat 계열) -w /etc/default/docker –k docker 3) audit 데몬 재시작 # service auditd restart"
 
-    cmd="auditctl -l | grep -F -- \"/etc/default/docker\"; grep -RhsF -- \"/etc/default/docker\" /etc/audit/rules.d /etc/audit/audit.rules"
     local audit_target="/etc/default/docker"
     local output
-    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; grep -RhsF -- "$audit_target" /etc/audit/rules.d /etc/audit/audit.rules 2>/dev/null; } | sed '/^$/d' | head -20)
+    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; cat /etc/audit/audit.rules /etc/audit/rules.d/*.rules 2>/dev/null | grep -F -- "$audit_target"; } | sed '/^$/d' | head -20)
     cur_state="${output:-감사 규칙 없음}"
     if [ -n "$output" ]; then
         status="양호"
@@ -421,7 +414,7 @@ check_CSAP_Docker_08() {
 check_CSAP_Docker_09() {
     local status="양호"
     local detail=""
-    local cmd="ps -ef | grep docker; docker network ls --quiet | xargs docker network inspect --format {{; docker"
+    local cmd="ps -ef | grep docker; docker network ls --quiet | xargs docker network inspect --format '{{; docker 명령어를 통해 옵션 적용 여부를 확인할 수 있음"
     local cur_state=""
     local remediation="￭ 아래와 같은 옵션으로 데몬 재시작 1) # dockerd --icc=true ￭ /etc/default/docker 파일에 아래와 같은 옵션 추가 후 데몬 재시작 1) dockerd, docker.socket, docker.service 중지 2) /etc/default/docker에 DOCKER_OPTS=\"--icc=false\" 문구 추가 3) /lib/systemd/system/docker.service에 아래의 내용 추가 4) docker.socket, docker.service, dockerd 재시작 5) # ps –ef | grep docker 명령어 입력하여 --icc=false 옵션 적용 확인"
 
@@ -608,14 +601,13 @@ check_CSAP_Docker_11() {
 check_CSAP_Docker_12() {
     local status="양호"
     local detail=""
-    local cmd="docker ps -quiet -all; docker inspect | grep SecurityOpt; docker ps --quiet --all | xargs docker inspect --format {{ .Id }}:"
+    local cmd="docker ps -quiet -all; docker ps --quiet --all | xargs docker inspect --format '{{ .Id }}:"
     local cur_state=""
     local remediation="￭ 컨테이너 옵션 실행 1) # docker run --security-opt=no-new-privileges"
 
     local output
     output=$({
         ( docker ps -quiet -all )
-        ( get_process_snapshot "securityopt" )
         ( docker ps --quiet --all | xargs docker inspect --format {{ .Id }}: )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
@@ -1175,7 +1167,7 @@ check_CSAP_Docker_24() {
 check_CSAP_Docker_25() {
     local status="양호"
     local detail=""
-    local cmd="docker ps --quiet --all | xargs docker inspect --format {{ .Id }}:"
+    local cmd="docker ps --quiet --all | xargs docker inspect --format '{{ .Id }}:"
     local cur_state=""
     local remediation="￭ Dockerfile에 아래의 내용 추가 1) RUN useradd –d /home/username –m s /bin/bash username USER username"
 
@@ -1297,7 +1289,7 @@ check_CSAP_Docker_26() {
 check_CSAP_Docker_27() {
     local status="양호"
     local detail=""
-    local cmd="ps -ef | grep docker | grep selinux-enabled; docker ps --quiet --all | xargs docker inspect --format {{ .Id }}:"
+    local cmd="ps -ef | grep docker | grep selinux-enabled; docker ps --quiet --all | xargs docker inspect --format '{{ .Id }}:"
     local cur_state=""
     local remediation="￭ SELinux 활성화 1) /etc/default/docker 파일 내 DOCKER_OPTS=\"--selinux-enabled\" 설정 2) /lib/systemd/system/docker.service 파일에 아래의 내용 수정 3) docker 데몬 재시작 4) --selinux-enabled 옵션 활성화 확인"
 
@@ -1359,14 +1351,13 @@ check_CSAP_Docker_27() {
 check_CSAP_Docker_28() {
     local status="양호"
     local detail=""
-    local cmd="docker ps -quiet; docker exec ps -el"
+    local cmd="docker ps -quiet"
     local cur_state=""
     local remediation="￭ 컨테이너에서 ssh를 제거하고 docker exec, docker attach 명령어 통해 컨테이너 접속 1) # docker exec —interactive —tty \$INSTANCE_ID sh 2) # docker attach \$INSTANCE_ID"
 
     local output
     output=$({
         ( docker ps -quiet )
-        ( docker exec ps -el )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
 
@@ -1421,14 +1412,13 @@ check_CSAP_Docker_28() {
 check_CSAP_Docker_29() {
     local status="양호"
     local detail=""
-    local cmd="docker ps -quiet -all; docker inspect | grep -A 50 NetworkSettings | grep Ports; docker ps -a"
+    local cmd="docker ps -quiet -all; docker ps -a"
     local cur_state=""
     local remediation="￭ privileged가 아닌 포트로 매핑 1) 컨테이너 시작 시, 컨테이너 포트를 호스트의 privileged 포트가 아닌 포트로 매핑 2) Docker 파일에서 privileged 포트 매핑 선언을 호스팅하는 컨테이너가 없는지 확인"
 
     local output
     output=$({
         ( docker ps -quiet -all )
-        ( get_process_snapshot "50" )
         ( docker ps -a )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
@@ -1484,7 +1474,7 @@ check_CSAP_Docker_29() {
 check_CSAP_Docker_30() {
     local status="양호"
     local detail=""
-    local cmd="docker ps --quiet --all | xargs docker inspect --format {{ .Id }}:PidsLimit="
+    local cmd="docker ps --quiet --all | xargs docker inspect --format '{{ .Id }}:PidsLimit="
     local cur_state=""
     local remediation="￭ 컨테이너 시작 시 —pids-limit 플래그를 사용 (예시) 1) # docker run –it —pids-limit 100 <image_id>"
 
@@ -1572,7 +1562,7 @@ check_CSAP_Docker_31() {
 check_CSAP_Docker_32() {
     local status="양호"
     local detail=""
-    local cmd="docker ps --quiet --all | xargs docker inspect --format {{ .Id }}"
+    local cmd="docker ps --quiet --all | xargs docker inspect --format '{{ .Id }}"
     local cur_state=""
     local remediation="￭ 호스트, 컨테이너 user namespaces 공유 제한 1) # docker run --rm -it --userns=host ubuntu bash (취약) 2) # docker run --rm -it ubuntu bash (양호)"
 

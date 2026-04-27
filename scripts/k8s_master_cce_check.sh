@@ -482,7 +482,6 @@ check_CSAP_K8sMaster_10() {
     local cur_state=""
     local remediation="￭ etcd 암호화 적용 1) /etc/kubernetes/manifests/kube-apiserver.yaml 파일 내 아래의 파라미터에 파일 추가 - --encryption-provider-config=<> ￭ 안전한 암호화 방식 사용 1) 아래 명령어 실행 후, --encryption-provider-config 값 확인 # ps –ef | grep kube-apiserver"
 
-    cmd="grep -E \"encryption-provider-config\" kube-apiserver.yaml"
     local api_manifest="${K8S_MANIFEST_DIR:-/etc/kubernetes/manifests}/kube-apiserver.yaml"
     local output
     output=$(k8s_collect_files "$api_manifest")
@@ -755,7 +754,7 @@ check_CSAP_K8sMaster_14() {
 check_CSAP_K8sMaster_15() {
     local status="양호"
     local detail=""
-    local cmd="ls -al /etc/kubernetes/pki/*.crt; ls -al /etc/kubernetes/pki/*.key; ls -al /var/;ib/kubernetes/ pem"
+    local cmd="ls -al /etc/kubernetes/pki/*.crt; ls -al /etc/kubernetes/pki/*.key"
     local cur_state=""
     local remediation="￭ pki 인증서 파일 접근 권한 확인 # chmod 644 /etc/kubernetes/pki/*.crt ￭ pki 키 파일 접근 권한 확인 # chmod 600 /etc/kubernetes/pki/*.key ￭ Hardway로 설치된 경우(예시) # chmod 600 /var/lib/kubernetes/*.pem"
 

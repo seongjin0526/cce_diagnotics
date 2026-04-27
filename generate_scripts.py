@@ -150,32 +150,127 @@ def read_excel_items():
 # ── Diagnosis text parsing ───────────────────────────────────────────────────
 
 def extract_commands_from_diagnosis(diag_text):
-    """Extract executable commands from diagnosis text."""
+    """Extract guide diagnostic commands from diagnosis text.
+
+    The source guide's diagnosis/check commands are the command source of truth.
+    Remediation examples that appear in combined "점검 및 조치 사례" blocks must
+    not become generated diagnostic commands.
+    """
     commands = []
+    in_guide_check_section = False
+    current_context = 'unknown'
     for line in diag_text.split('\n'):
         stripped = line.strip()
+        if not stripped:
+            continue
+
+        if _is_guide_check_section_start(stripped):
+            in_guide_check_section = True
+            current_context = 'diagnostic'
+            continue
+        if _is_guide_non_check_section_start(stripped):
+            in_guide_check_section = False
+            current_context = 'unknown'
+            continue
+
+        if not in_guide_check_section and not _looks_like_guide_command_line(stripped):
+            continue
+
+        command_like = _looks_like_guide_command_line(stripped)
+        if not command_like:
+            current_context = _classify_guide_line_context(stripped, current_context)
+            continue
+
+        if current_context == 'remediation':
+            continue
+
         # Match lines starting with # or $ followed by a command
         m = re.match(r'^[#$]\s+(.+)', stripped)
         if m:
             cmd = m.group(1).strip()
             # Filter out comments and non-commands
-            if cmd and not cmd.startswith('※') and not cmd.startswith('(') and len(cmd) > 3:
+            if _is_guide_diagnostic_command(cmd):
                 commands.append(cmd)
         # Also match numbered commands like "1) # cat ..."
         m2 = re.match(r'^\d+\)\s*[#$]\s+(.+)', stripped)
         if m2:
             cmd = m2.group(1).strip()
-            if cmd and len(cmd) > 3:
+            if _is_guide_diagnostic_command(cmd):
                 commands.append(cmd)
         inline_cmd = extract_inline_command(stripped)
-        if inline_cmd:
+        if inline_cmd and _is_guide_diagnostic_command(inline_cmd):
             commands.append(inline_cmd)
 
-    deduped = []
+    combined_commands = []
     for cmd in commands:
-        if cmd and cmd not in deduped:
-            deduped.append(cmd)
+        if combined_commands and combined_commands[-1].rstrip().endswith('|'):
+            combined_commands[-1] = f'{combined_commands[-1].rstrip()} {cmd}'
+        else:
+            combined_commands.append(cmd)
+
+    deduped = []
+    for cmd in combined_commands:
+        display_cmd = normalize_guide_command_for_display(cmd)
+        if display_cmd and display_cmd not in deduped:
+            deduped.append(display_cmd)
     return deduped
+
+
+def _is_guide_check_section_start(line):
+    normalized = normalize_dash_text(line)
+    return normalized.startswith(('[진단방법]', '[점검내용]', '[점검 및 조치 사례]'))
+
+
+def _is_guide_non_check_section_start(line):
+    normalized = normalize_dash_text(line)
+    return normalized.startswith(('[조치방법]', '[조치 명령어]', '[상세 조치 사례]', '[비고]'))
+
+
+def _looks_like_guide_command_line(line):
+    normalized = normalize_dash_text(line).strip()
+    if re.match(r'^(?:\d+[.)]\s*)?[#$]\s+\S+', normalized):
+        return True
+    return bool(extract_inline_command(normalized))
+
+
+def _classify_guide_line_context(line, previous_context):
+    normalized = normalize_dash_text(line).lower()
+    diagnostic_keywords = (
+        '확인', '점검', '조회', '검토', '출력', '목록', '검색', '버전',
+        '상태', '여부', '분석', 'check', 'verify', 'list', 'show',
+    )
+    remediation_keywords = (
+        '조치', '수정', '변경', '삭제', '제거', '재구동', '재시작',
+        '활성화', '비활성화', '설치', '생성', '추가', '입력', '적용',
+        '권고', '준비', 'restart', 'reload', 'enable', 'install',
+    )
+    if any(keyword in normalized for keyword in diagnostic_keywords):
+        return 'diagnostic'
+    if any(keyword in normalized for keyword in remediation_keywords):
+        return 'remediation'
+    return previous_context
+
+
+def _is_guide_diagnostic_command(cmd):
+    normalized = normalize_guide_command_for_display(cmd)
+    if not normalized or len(normalized) <= 3:
+        return False
+    if normalized.startswith(('※', '(')):
+        return False
+    return not is_state_changing_command(normalized)
+
+
+def normalize_guide_command_for_display(cmd):
+    """Normalize only OCR/typography noise while preserving guide command text."""
+    if not cmd:
+        return ''
+    normalized = normalize_dash_text(cmd)
+    normalized = normalized.replace('\u201c', '"').replace('\u201d', '"')
+    normalized = normalized.replace('\u2018', "'").replace('\u2019', "'")
+    normalized = normalized.replace(r'\|', '|')
+    normalized = re.sub(r'(\[[^\]]+\])\s*[가-힣].*$', r'\1', normalized)
+    normalized = re.sub(r'\s+', ' ', normalized).strip()
+    return normalized
 
 
 def extract_good_bad_criteria(diag_text):
@@ -620,6 +715,61 @@ def escape_ps_string(s):
     return s.strip()
 
 
+STATE_CHANGING_COMMANDS = {
+    'rm', 'rmdir', 'del', 'format', 'mkfs', 'dd',
+    'shutdown', 'reboot', 'halt', 'poweroff', 'kill', 'pkill',
+    'adduser', 'useradd', 'groupadd', 'usermod', 'groupmod', 'passwd', 'chpasswd',
+    'chmod', 'chown', 'chgrp', 'setfacl',
+    'mkdir', 'touch', 'ln', 'cp', 'mv', 'tee',
+    'vi', 'vim', 'nano', 'source',
+    'a2ensite', 'a2dissite', 'a2enmod', 'a2dismod',
+}
+
+PACKAGE_COMMANDS = {'apt', 'apt-get', 'yum', 'dnf', 'zypper', 'apk', 'brew'}
+SYSTEMCTL_MUTATING_ACTIONS = {'restart', 'start', 'stop', 'reload', 'enable', 'disable', 'daemon-reload'}
+
+
+def is_state_changing_command(cmd):
+    """Return True when a command chain contains remediation/state-changing work."""
+    normalized = normalize_dash_text(cmd).strip()
+    if not normalized:
+        return False
+    if re.search(r'(^|\s)(?:>{1,2}|<)\s*[^&\s]|(^|\s)sed\s+-i\b', normalized):
+        return True
+
+    try:
+        lexer = shlex.shlex(normalized, posix=True, punctuation_chars='|;&')
+        lexer.whitespace_split = True
+        tokens = list(lexer)
+    except ValueError:
+        dangerous = '|'.join(re.escape(command) for command in sorted(STATE_CHANGING_COMMANDS))
+        return bool(re.search(rf'(^|[;&|]\s*)({dangerous})\b|(^|\s)sed\s+-i\b', normalized, re.IGNORECASE))
+
+    command_start = True
+    for token in tokens:
+        if token in {';', '|', '||', '&&'}:
+            command_start = True
+            continue
+        if not command_start:
+            continue
+        first = token.lower()
+        if first in STATE_CHANGING_COMMANDS:
+            return True
+        if first in PACKAGE_COMMANDS:
+            return True
+        command_start = False
+
+    lowered = [token.lower() for token in tokens]
+    for idx, token in enumerate(lowered):
+        if token == 'systemctl' and idx + 1 < len(lowered) and lowered[idx + 1] in SYSTEMCTL_MUTATING_ACTIONS:
+            return True
+        if token == 'service' and any(action in lowered[idx + 2: idx + 5] for action in SYSTEMCTL_MUTATING_ACTIONS):
+            return True
+        if token == 'auditctl' and '-l' not in lowered[idx + 1: idx + 3]:
+            return True
+    return False
+
+
 def sanitize_command(cmd):
     """Clean a command extracted from diagnosis text for safe execution in a script."""
     if not cmd:
@@ -653,6 +803,8 @@ def sanitize_command(cmd):
         cmd = cmd.replace("'", '')
     # Clean up double spaces
     cmd = re.sub(r'\s{2,}', ' ', cmd).strip()
+    if is_state_changing_command(cmd):
+        return ''
     return cmd
 
 
@@ -660,11 +812,13 @@ def is_safe_command(cmd):
     """Check if a command is safe to embed in a generated script."""
     if not cmd or len(cmd.strip()) < 3:
         return False
+    if is_state_changing_command(cmd):
+        return False
     # Block destructive commands
     if re.match(r'^\s*(rm|rmdir|del|format|mkfs|dd|shutdown|reboot|halt|poweroff|kill|pkill|adduser|useradd|groupadd|usermod|groupmod|passwd|chpasswd)\b', cmd):
         return False
     # Block state-changing or interactive commands
-    if re.match(r'^\s*(vi|vim|nano|less|more|systemctl\s+(restart|start|stop|reload|enable|disable|daemon-reload)|service\b.+\b(restart|start|stop|reload)|source|\.)\b', cmd):
+    if re.match(r'^\s*(cd|vi|vim|nano|less|more|systemctl\s+(restart|start|stop|reload|enable|disable|daemon-reload)|service\b.+\b(restart|start|stop|reload)|source|\.)\b', cmd):
         return False
     # Block commands that are just template stubs or redirections
     stripped = cmd.strip()
@@ -733,15 +887,20 @@ def generate_bash_check_function(item, app_def):
     lines.append(f'    local detail=""')
 
     # Sanitize extracted commands and adapt app-specific query helpers.
-    display_commands = [sanitize_command(c) for c in extracted_commands]
-    display_commands = [c for c in display_commands if is_safe_command(c)]
+    guide_display_commands = [normalize_guide_command_for_display(c) for c in extracted_commands]
+    guide_display_commands = [c for c in guide_display_commands if c]
+    display_commands = list(guide_display_commands)
+    execution_candidates = [sanitize_command(c) for c in extracted_commands]
+    execution_candidates = [c for c in execution_candidates if is_safe_command(c)]
     used_fallback_commands = False
-    if not display_commands:
-        display_commands = infer_fallback_commands(item, app_def)
-        display_commands = [c for c in display_commands if is_safe_command(c)]
-        used_fallback_commands = bool(display_commands)
-    check_type = classify_check_type(diag, display_commands, item['title'])
-    commands = [prepare_command_for_app(c, app_def) for c in display_commands]
+    if not execution_candidates:
+        execution_candidates = infer_fallback_commands(item, app_def)
+        execution_candidates = [c for c in execution_candidates if is_safe_command(c)]
+        used_fallback_commands = bool(execution_candidates)
+        if not display_commands:
+            display_commands = list(execution_candidates)
+    check_type = classify_check_type(diag, execution_candidates, item['title'])
+    commands = [prepare_command_for_app(c, app_def) for c in execution_candidates]
     commands = [c for c in commands if is_safe_command(c)]
     if used_fallback_commands:
         if any(cmd.startswith(('run_mysql_query', 'run_psql_query', 'run_mongo_query', 'run_redis_cli', 'run_es_api')) for cmd in commands):
@@ -760,7 +919,7 @@ def generate_bash_check_function(item, app_def):
     lines.append(f'    local remediation="{remediation}"')
     lines.append('')
 
-    if _generate_special_bash_check(lines, item, diag, commands, good_criteria, bad_criteria, app_def):
+    if _generate_special_bash_check(lines, item, diag, commands, good_criteria, bad_criteria, app_def, bool(guide_display_commands)):
         pass
     elif check_type == 'manual':
         if commands and is_safe_command(commands[0]):
@@ -817,27 +976,28 @@ def generate_bash_check_function(item, app_def):
     return '\n'.join(lines), func_name
 
 
-def _generate_special_bash_check(lines, item, diag, commands, good_criteria, bad_criteria, app_def):
+def _generate_special_bash_check(lines, item, diag, commands, good_criteria, bad_criteria, app_def, preserve_guide_cmd=False):
     platform = app_def.get('platform', '')
     code = item['code'].split('/')[0].strip()
 
     if platform == 'Docker':
-        return _generate_docker_special_check(lines, code)
+        return _generate_docker_special_check(lines, code, preserve_guide_cmd)
     if platform in ('Kubernetes(Master)', 'Kubernetes(Worker)'):
-        return _generate_k8s_special_check(lines, code, platform)
+        return _generate_k8s_special_check(lines, code, platform, preserve_guide_cmd)
     if platform == 'MySQL':
-        return _generate_mysql_special_check(lines, code)
+        return _generate_mysql_special_check(lines, code, preserve_guide_cmd)
     if platform == 'MongoDB':
-        return _generate_mongodb_observation_check(lines, code, item['title'])
+        return _generate_mongodb_observation_check(lines, code, item['title'], preserve_guide_cmd)
     if platform == 'Redis':
-        return _generate_redis_special_check(lines, code)
+        return _generate_redis_special_check(lines, code, preserve_guide_cmd)
     if platform == 'Elasticsearch':
-        return _generate_elasticsearch_special_check(lines, code)
+        return _generate_elasticsearch_special_check(lines, code, preserve_guide_cmd)
     return False
 
 
-def _append_k8s_manifest_setup(lines, cmd, file_vars):
-    lines.append(f'    cmd="{escape_bash_string(cmd)}"')
+def _append_k8s_manifest_setup(lines, cmd, file_vars, preserve_guide_cmd=False):
+    if not preserve_guide_cmd:
+        lines.append(f'    cmd="{escape_bash_string(cmd)}"')
     for var_name, expr in file_vars:
         lines.append(f'    local {var_name}="{expr}"')
     lines.append('    local output')
@@ -858,7 +1018,12 @@ def _append_k8s_close(lines):
     lines.append('    fi')
 
 
-def _generate_k8s_special_check(lines, code, platform):
+def _append_special_cmd(lines, preserve_guide_cmd, assignment):
+    if not preserve_guide_cmd:
+        lines.append(assignment)
+
+
+def _generate_k8s_special_check(lines, code, platform, preserve_guide_cmd=False):
     if platform == 'Kubernetes(Master)':
         manifest_dir = '${K8S_MANIFEST_DIR:-/etc/kubernetes/manifests}'
         api = ('api_manifest', f'{manifest_dir}/kube-apiserver.yaml')
@@ -867,7 +1032,7 @@ def _generate_k8s_special_check(lines, code, platform):
         etcd = ('etcd_manifest', f'{manifest_dir}/etcd.yaml')
 
         if code == 'CSAP-K8sMaster-01':
-            _append_k8s_manifest_setup(lines, 'grep -E "anonymous-auth|service-account-lookup" kube-apiserver.yaml', [api])
+            _append_k8s_manifest_setup(lines, 'grep -E "anonymous-auth|service-account-lookup" kube-apiserver.yaml', [api], preserve_guide_cmd)
             _append_k8s_missing_check(lines, [api])
             lines.append('        if k8s_has "--anonymous-auth(=|[[:space:]]+)false" "$api_manifest" && k8s_has "--service-account-lookup(=|[[:space:]]+)true" "$api_manifest"; then')
             lines.append('            status="양호"')
@@ -880,7 +1045,7 @@ def _generate_k8s_special_check(lines, code, platform):
             return True
 
         if code == 'CSAP-K8sMaster-02':
-            _append_k8s_manifest_setup(lines, 'grep -E "token-auth-file" kube-apiserver.yaml', [api])
+            _append_k8s_manifest_setup(lines, 'grep -E "token-auth-file" kube-apiserver.yaml', [api], preserve_guide_cmd)
             _append_k8s_missing_check(lines, [api])
             lines.append('        if k8s_has "--token-auth-file" "$api_manifest"; then')
             lines.append('            status="취약"')
@@ -893,7 +1058,7 @@ def _generate_k8s_special_check(lines, code, platform):
             return True
 
         if code == 'CSAP-K8sMaster-03':
-            _append_k8s_manifest_setup(lines, 'grep -E "bind-address" kube-scheduler.yaml kube-controller-manager.yaml', [scheduler, controller])
+            _append_k8s_manifest_setup(lines, 'grep -E "bind-address" kube-scheduler.yaml kube-controller-manager.yaml', [scheduler, controller], preserve_guide_cmd)
             _append_k8s_missing_check(lines, [scheduler, controller])
             lines.append("        if k8s_has \"--bind-address(=|[[:space:]]+)(0\\.0\\.0\\.0|::|\\\"\\\"|'')\" \"$scheduler_manifest\" \"$controller_manifest\"; then")
             lines.append('            status="취약"')
@@ -909,7 +1074,7 @@ def _generate_k8s_special_check(lines, code, platform):
             return True
 
         if code == 'CSAP-K8sMaster-04':
-            _append_k8s_manifest_setup(lines, 'grep -E "authorization-mode" kube-apiserver.yaml', [api])
+            _append_k8s_manifest_setup(lines, 'grep -E "authorization-mode" kube-apiserver.yaml', [api], preserve_guide_cmd)
             _append_k8s_missing_check(lines, [api])
             lines.append('        if k8s_has "--authorization-mode(=|[[:space:]]+)[^[:space:]]*AlwaysAllow" "$api_manifest"; then')
             lines.append('            status="취약"')
@@ -925,7 +1090,7 @@ def _generate_k8s_special_check(lines, code, platform):
             return True
 
         if code == 'CSAP-K8sMaster-05':
-            _append_k8s_manifest_setup(lines, 'grep -E "admission-control-config-file|enable-admission-plugins|disable-admission-plugins" kube-apiserver.yaml', [api])
+            _append_k8s_manifest_setup(lines, 'grep -E "admission-control-config-file|enable-admission-plugins|disable-admission-plugins" kube-apiserver.yaml', [api], preserve_guide_cmd)
             _append_k8s_missing_check(lines, [api])
             lines.append('        if k8s_has "--disable-admission-plugins=.*(NodeRestriction|PodSecurity|PodSecurityPolicy|SecurityContextDeny)" "$api_manifest"; then')
             lines.append('            status="취약"')
@@ -941,7 +1106,7 @@ def _generate_k8s_special_check(lines, code, platform):
             return True
 
         if code == 'CSAP-K8sMaster-06':
-            _append_k8s_manifest_setup(lines, 'grep -E "secure-port|certificate-authority|client-certificate|client-key|tls-cert-file|tls-private-key-file|client-ca-file|tls-cipher-suites" kube-apiserver.yaml', [api])
+            _append_k8s_manifest_setup(lines, 'grep -E "secure-port|certificate-authority|client-certificate|client-key|tls-cert-file|tls-private-key-file|client-ca-file|tls-cipher-suites" kube-apiserver.yaml', [api], preserve_guide_cmd)
             _append_k8s_missing_check(lines, [api])
             lines.append('        if k8s_has "--secure-port(=|[[:space:]]+)0" "$api_manifest"; then')
             lines.append('            status="취약"')
@@ -957,7 +1122,7 @@ def _generate_k8s_special_check(lines, code, platform):
             return True
 
         if code == 'CSAP-K8sMaster-07':
-            _append_k8s_manifest_setup(lines, 'grep -E "audit-log|audit-policy" kube-apiserver.yaml', [api])
+            _append_k8s_manifest_setup(lines, 'grep -E "audit-log|audit-policy" kube-apiserver.yaml', [api], preserve_guide_cmd)
             _append_k8s_missing_check(lines, [api])
             lines.append('        if k8s_has "--audit-log-path" "$api_manifest" && k8s_has "--audit-policy-file" "$api_manifest" && k8s_has "--audit-log-maxage" "$api_manifest" && k8s_has "--audit-log-maxbackup" "$api_manifest" && k8s_has "--audit-log-maxsize" "$api_manifest"; then')
             lines.append('            status="양호"')
@@ -970,7 +1135,7 @@ def _generate_k8s_special_check(lines, code, platform):
             return True
 
         if code == 'CSAP-K8sMaster-08':
-            _append_k8s_manifest_setup(lines, 'grep -E "use-service-account-credentials|service-account-private-key-file" kube-controller-manager.yaml', [controller])
+            _append_k8s_manifest_setup(lines, 'grep -E "use-service-account-credentials|service-account-private-key-file" kube-controller-manager.yaml', [controller], preserve_guide_cmd)
             _append_k8s_missing_check(lines, [controller])
             lines.append('        if k8s_has "--use-service-account-credentials(=|[[:space:]]+)true" "$controller_manifest" && k8s_has "--service-account-private-key-file" "$controller_manifest"; then')
             lines.append('            status="양호"')
@@ -983,7 +1148,7 @@ def _generate_k8s_special_check(lines, code, platform):
             return True
 
         if code == 'CSAP-K8sMaster-09':
-            _append_k8s_manifest_setup(lines, 'grep -E "root-ca-file|feature-gates|RotateKubeletServerCertificate" kube-controller-manager.yaml', [controller])
+            _append_k8s_manifest_setup(lines, 'grep -E "root-ca-file|feature-gates|RotateKubeletServerCertificate" kube-controller-manager.yaml', [controller], preserve_guide_cmd)
             _append_k8s_missing_check(lines, [controller])
             lines.append('        if k8s_has "--root-ca-file" "$controller_manifest" && k8s_has "RotateKubeletServerCertificate=true" "$controller_manifest"; then')
             lines.append('            status="양호"')
@@ -996,7 +1161,7 @@ def _generate_k8s_special_check(lines, code, platform):
             return True
 
         if code == 'CSAP-K8sMaster-10':
-            _append_k8s_manifest_setup(lines, 'grep -E "encryption-provider-config" kube-apiserver.yaml', [api])
+            _append_k8s_manifest_setup(lines, 'grep -E "encryption-provider-config" kube-apiserver.yaml', [api], preserve_guide_cmd)
             _append_k8s_missing_check(lines, [api])
             lines.append('        local enc_config')
             lines.append('        enc_config=$(k8s_collect_files "$api_manifest" | sed -n \'s/.*--encryption-provider-config[= ]\\([^[:space:]]*\\).*/\\1/p\' | head -1)')
@@ -1025,7 +1190,7 @@ def _generate_k8s_special_check(lines, code, platform):
             return True
 
         if code == 'CSAP-K8sMaster-11':
-            _append_k8s_manifest_setup(lines, 'grep -E "client-cert-auth|cert-file|key-file|trusted-ca-file|auto-tls|etcd-certfile|etcd-keyfile|etcd-cafile" etcd.yaml kube-apiserver.yaml', [etcd, api])
+            _append_k8s_manifest_setup(lines, 'grep -E "client-cert-auth|cert-file|key-file|trusted-ca-file|auto-tls|etcd-certfile|etcd-keyfile|etcd-cafile" etcd.yaml kube-apiserver.yaml', [etcd, api], preserve_guide_cmd)
             _append_k8s_missing_check(lines, [etcd, api])
             lines.append('        if k8s_has "--auto-tls(=|[[:space:]]+)true|--peer-auto-tls(=|[[:space:]]+)true" "$etcd_manifest"; then')
             lines.append('            status="취약"')
@@ -1045,7 +1210,7 @@ def _generate_k8s_special_check(lines, code, platform):
         kubelet_service = ('kubelet_service_conf', '${KUBELET_SERVICE_CONF:-/usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf}')
 
         if code == 'CSAP-K8sWorker-01':
-            _append_k8s_manifest_setup(lines, 'grep -E "anonymous|readOnlyPort|read-only-port" kubelet config/service', [kubelet_conf, kubelet_service])
+            _append_k8s_manifest_setup(lines, 'grep -E "anonymous|readOnlyPort|read-only-port" kubelet config/service', [kubelet_conf, kubelet_service], preserve_guide_cmd)
             _append_k8s_missing_check(lines, [kubelet_conf])
             lines.append('        if (k8s_has "anonymous:[[:space:]]*$" "$kubelet_conf" && k8s_has "enabled:[[:space:]]*false" "$kubelet_conf" || k8s_has "--anonymous-auth(=|[[:space:]]+)false" "$kubelet_service_conf" "$kubelet_conf") && (k8s_has "readOnlyPort:[[:space:]]*0" "$kubelet_conf" || k8s_has "--read-only-port(=|[[:space:]]+)0" "$kubelet_service_conf" "$kubelet_conf"); then')
             lines.append('            status="양호"')
@@ -1058,7 +1223,7 @@ def _generate_k8s_special_check(lines, code, platform):
             return True
 
         if code == 'CSAP-K8sWorker-02':
-            _append_k8s_manifest_setup(lines, 'grep -E "authorization-mode|authorization:|mode:" kubelet config/service', [kubelet_conf, kubelet_service])
+            _append_k8s_manifest_setup(lines, 'grep -E "authorization-mode|authorization:|mode:" kubelet config/service', [kubelet_conf, kubelet_service], preserve_guide_cmd)
             _append_k8s_missing_check(lines, [kubelet_conf])
             lines.append('        if k8s_has "AlwaysAllow" "$kubelet_conf" "$kubelet_service_conf"; then')
             lines.append('            status="취약"')
@@ -1074,7 +1239,7 @@ def _generate_k8s_special_check(lines, code, platform):
             return True
 
         if code == 'CSAP-K8sWorker-03':
-            _append_k8s_manifest_setup(lines, 'grep -E "clientCAFile|tlsCertFile|tlsPrivateKeyFile|tlsCipherSuites|serverTLSBootstrap|rotateCertificates|hostname-override" kubelet config/service', [kubelet_conf, kubelet_service])
+            _append_k8s_manifest_setup(lines, 'grep -E "clientCAFile|tlsCertFile|tlsPrivateKeyFile|tlsCipherSuites|serverTLSBootstrap|rotateCertificates|hostname-override" kubelet config/service', [kubelet_conf, kubelet_service], preserve_guide_cmd)
             _append_k8s_missing_check(lines, [kubelet_conf])
             lines.append('        if k8s_has "--hostname-override" "$kubelet_service_conf" "$kubelet_conf"; then')
             lines.append('            status="취약"')
@@ -1090,7 +1255,7 @@ def _generate_k8s_special_check(lines, code, platform):
             return True
 
         if code == 'CSAP-K8sWorker-04':
-            _append_k8s_manifest_setup(lines, 'grep -E "protectKernelDefaults|protect-kernel-defaults" kubelet config/service', [kubelet_conf, kubelet_service])
+            _append_k8s_manifest_setup(lines, 'grep -E "protectKernelDefaults|protect-kernel-defaults" kubelet config/service', [kubelet_conf, kubelet_service], preserve_guide_cmd)
             _append_k8s_missing_check(lines, [kubelet_conf])
             lines.append('        if k8s_has "protectKernelDefaults:[[:space:]]*true|--protect-kernel-defaults(=|[[:space:]]+)true" "$kubelet_conf" "$kubelet_service_conf"; then')
             lines.append('            status="양호"')
@@ -1105,12 +1270,12 @@ def _generate_k8s_special_check(lines, code, platform):
     return False
 
 
-def _generate_docker_special_check(lines, code):
+def _generate_docker_special_check(lines, code, preserve_guide_cmd=False):
     if code == 'CSAP-Docker-02':
-        lines.append('    cmd="getent group docker dockerroot root; grep -E \\"^(docker|dockerroot|root):\\" /etc/group"')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="cat /etc/group | grep docker; cat /etc/group | grep root"')
         lines.append('    local group_output')
         lines.append('    local extra_members')
-        lines.append('    group_output=$({ getent group docker dockerroot root 2>/dev/null; grep -E "^(docker|dockerroot|root):" /etc/group 2>/dev/null; } | awk -F: \'!seen[$1]++\' | head -20)')
+        lines.append('    group_output=$({ cat /etc/group 2>/dev/null | grep docker; cat /etc/group 2>/dev/null | grep root; } | awk -F: \'!seen[$1]++\' | head -20)')
         lines.append('    cur_state="${group_output:-그룹 정보 없음}"')
         lines.append('    extra_members=$(printf \'%s\\n\' "$group_output" | awk -F: \'$1=="docker" || $1=="dockerroot" || $1=="root" { n=split($4, members, ","); for (i=1; i<=n; i++) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", members[i]); if (members[i] != "" && members[i] != "root" && !seen[members[i]]++) { if (out != "") out=out ","; out=out members[i]; } } } END { print out }\')')
         lines.append('    if [ -n "$extra_members" ]; then')
@@ -1135,10 +1300,10 @@ def _generate_docker_special_check(lines, code):
         target_safe = escape_bash_string(target)
         good_safe = escape_bash_string(good_detail)
         bad_safe = escape_bash_string(bad_detail)
-        lines.append(f'    cmd="auditctl -l | grep -F -- \\"{target_safe}\\"; grep -RhsF -- \\"{target_safe}\\" /etc/audit/rules.d /etc/audit/audit.rules"')
+        _append_special_cmd(lines, preserve_guide_cmd, f'    cmd="auditctl -l | grep {target_safe}; cat [audit.rules 파일 위치] | grep {target_safe}"')
         lines.append(f'    local audit_target="{target_safe}"')
         lines.append('    local output')
-        lines.append('    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; grep -RhsF -- "$audit_target" /etc/audit/rules.d /etc/audit/audit.rules 2>/dev/null; } | sed \'/^$/d\' | head -20)')
+        lines.append('    output=$({ auditctl -l 2>/dev/null | grep -F -- "$audit_target"; cat /etc/audit/audit.rules /etc/audit/rules.d/*.rules 2>/dev/null | grep -F -- "$audit_target"; } | sed \'/^$/d\' | head -20)')
         lines.append('    cur_state="${output:-감사 규칙 없음}"')
         lines.append('    if [ -n "$output" ]; then')
         lines.append('        status="양호"')
@@ -1152,9 +1317,9 @@ def _generate_docker_special_check(lines, code):
     return False
 
 
-def _generate_mysql_special_check(lines, code):
+def _generate_mysql_special_check(lines, code, preserve_guide_cmd=False):
     if code == 'ISMS-D-01':
-        lines.append('    cmd="run_mysql_query \\"SELECT user, host, plugin, account_locked, password_expired FROM mysql.user WHERE user = \\\'root\\\';\\""')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="run_mysql_query \\"SELECT user, host, plugin, account_locked, password_expired FROM mysql.user WHERE user = \\\'root\\\';\\""')
         lines.append('    local output')
         lines.append("""    output=$(run_mysql_query "SELECT user, host, plugin, account_locked, password_expired FROM mysql.user WHERE user = 'root';")""")
         lines.append('    cur_state="${output:-결과 없음}"')
@@ -1171,7 +1336,7 @@ def _generate_mysql_special_check(lines, code):
         return True
 
     if code == 'ISMS-D-02':
-        lines.append('    cmd="run_mysql_query \\"SELECT user, host, account_locked FROM mysql.user ORDER BY user, host;\\""')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="run_mysql_query \\"SELECT user, host, account_locked FROM mysql.user ORDER BY user, host;\\""')
         lines.append('    local output')
         lines.append("""    output=$(run_mysql_query "SELECT user, host, account_locked FROM mysql.user ORDER BY user, host;")""")
         lines.append('    cur_state="${output:-결과 없음}"')
@@ -1185,7 +1350,7 @@ def _generate_mysql_special_check(lines, code):
         return True
 
     if code == 'ISMS-D-04':
-        lines.append('    cmd="run_mysql_query \\"SELECT grantee, privilege_type FROM information_schema.user_privileges WHERE privilege_type IN (\\\'SUPER\\\',\\\'SYSTEM_USER\\\',\\\'SYSTEM_VARIABLES_ADMIN\\\',\\\'ROLE_ADMIN\\\',\\\'CREATE USER\\\',\\\'GRANT OPTION\\\') ORDER BY grantee, privilege_type;\\""')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="run_mysql_query \\"SELECT grantee, privilege_type FROM information_schema.user_privileges WHERE privilege_type IN (\\\'SUPER\\\',\\\'SYSTEM_USER\\\',\\\'SYSTEM_VARIABLES_ADMIN\\\',\\\'ROLE_ADMIN\\\',\\\'CREATE USER\\\',\\\'GRANT OPTION\\\') ORDER BY grantee, privilege_type;\\""')
         lines.append('    local output')
         lines.append("""    output=$(run_mysql_query "SELECT grantee, privilege_type FROM information_schema.user_privileges WHERE privilege_type IN ('SUPER','SYSTEM_USER','SYSTEM_VARIABLES_ADMIN','ROLE_ADMIN','CREATE USER','GRANT OPTION') ORDER BY grantee, privilege_type;")""")
         lines.append('    cur_state="${output:-결과 없음}"')
@@ -1199,7 +1364,7 @@ def _generate_mysql_special_check(lines, code):
         return True
 
     if code == 'ISMS-D-06':
-        lines.append('    cmd="run_mysql_query \\"SELECT user, host FROM mysql.user ORDER BY user, host;\\""')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="run_mysql_query \\"SELECT user, host FROM mysql.user ORDER BY user, host;\\""')
         lines.append('    local output')
         lines.append("""    output=$(run_mysql_query "SELECT user, host FROM mysql.user ORDER BY user, host;")""")
         lines.append('    cur_state="${output:-결과 없음}"')
@@ -1216,7 +1381,7 @@ def _generate_mysql_special_check(lines, code):
         return True
 
     if code == 'ISMS-D-10':
-        lines.append('    cmd="run_mysql_query \\"SELECT user, host FROM mysql.user WHERE host IN (\\\'%\\\',\\\'0.0.0.0\\\',\\\'::\\\') ORDER BY user, host;\\""')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="run_mysql_query \\"SELECT user, host FROM mysql.user WHERE host IN (\\\'%\\\',\\\'0.0.0.0\\\',\\\'::\\\') ORDER BY user, host;\\""')
         lines.append('    local output')
         lines.append("""    output=$(run_mysql_query "SELECT user, host FROM mysql.user WHERE host IN ('%','0.0.0.0','::') ORDER BY user, host;")""")
         lines.append('    cur_state="${output:-결과 없음}"')
@@ -1230,7 +1395,7 @@ def _generate_mysql_special_check(lines, code):
         return True
 
     if code == 'ISMS-D-11':
-        lines.append('    cmd="run_mysql_query \\"SELECT grantee, privilege_type FROM information_schema.schema_privileges WHERE table_schema = \\\'mysql\\\' ORDER BY grantee, privilege_type;\\""')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="run_mysql_query \\"SELECT grantee, privilege_type FROM information_schema.schema_privileges WHERE table_schema = \\\'mysql\\\' ORDER BY grantee, privilege_type;\\""')
         lines.append('    local output')
         lines.append("""    output=$(run_mysql_query "SELECT grantee, privilege_type FROM information_schema.schema_privileges WHERE table_schema = 'mysql' ORDER BY grantee, privilege_type;")""")
         lines.append('    cur_state="${output:-결과 없음}"')
@@ -1249,9 +1414,9 @@ def _generate_mysql_special_check(lines, code):
     return False
 
 
-def _generate_redis_special_check(lines, code):
+def _generate_redis_special_check(lines, code, preserve_guide_cmd=False):
     if code == 'CSAP-Redis-01':
-        lines.append('    cmd="run_redis_cli \\"CONFIG GET requirepass\\"; grep -Ein \\"^[[:space:]]*requirepass\\" ${REDIS_CONF:-/etc/redis/redis.conf}"')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="run_redis_cli \\"CONFIG GET requirepass\\"; grep -Ein \\"^[[:space:]]*requirepass\\" ${REDIS_CONF:-/etc/redis/redis.conf}"')
         lines.append('    local output')
         lines.append('    output=$({ ( run_redis_cli "CONFIG GET requirepass" ); ( cfg="${REDIS_CONF:-/etc/redis/redis.conf}"; [ -f "$cfg" ] && grep -Ein "^[[:space:]]*requirepass" "$cfg" 2>/dev/null || echo "FILE_DEFAULT_BAD|기본값은 인증 비밀번호 미설정입니다." ); } 2>/dev/null | sed \'/^$/d\' | head -20)')
         lines.append('    cur_state="${output:-결과 없음}"')
@@ -1271,7 +1436,7 @@ def _generate_redis_special_check(lines, code):
         return True
 
     if code == 'CSAP-Redis-07':
-        lines.append('    cmd="run_redis_cli \\"CONFIG GET loglevel\\"; run_redis_cli \\"CONFIG GET logfile\\"; grep -Ein \\"^[[:space:]]*log(level|file)\\" ${REDIS_CONF:-/etc/redis/redis.conf}"')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="run_redis_cli \\"CONFIG GET loglevel\\"; run_redis_cli \\"CONFIG GET logfile\\"; grep -Ein \\"^[[:space:]]*log(level|file)\\" ${REDIS_CONF:-/etc/redis/redis.conf}"')
         lines.append('    local output')
         lines.append('    output=$({ ( run_redis_cli "CONFIG GET loglevel" ); ( run_redis_cli "CONFIG GET logfile" ); ( cfg="${REDIS_CONF:-/etc/redis/redis.conf}"; [ -f "$cfg" ] && grep -Ein "^[[:space:]]*log(level|file)" "$cfg" 2>/dev/null || echo "FILE_DEFAULT_GOOD|기본 loglevel은 notice 입니다." ); } 2>/dev/null | sed \'/^$/d\' | head -20)')
         lines.append('    cur_state="${output:-결과 없음}"')
@@ -1290,9 +1455,9 @@ def _generate_redis_special_check(lines, code):
     return False
 
 
-def _generate_mongodb_observation_check(lines, code, title):
+def _generate_mongodb_observation_check(lines, code, title, preserve_guide_cmd=False):
     if code == 'CSAP-MongoDB-01':
-        lines.append('    cmd="run_mongo_query \\"db.adminCommand({listDatabases:1})\\" admin; run_mongo_query \\"db.getSiblingDB(...).getCollectionNames()\\" admin"')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="run_mongo_query \\"db.adminCommand({listDatabases:1})\\" admin; run_mongo_query \\"db.getSiblingDB(...).getCollectionNames()\\" admin"')
         lines.append("    local dbs_output")
         lines.append("    local collections_output")
         lines.append("""    dbs_output=$(run_mongo_query 'db.adminCommand({listDatabases:1}).databases.map(function(x){return x.name;}).join("\\n")' admin)""")
@@ -1306,7 +1471,7 @@ def _generate_mongodb_observation_check(lines, code, title):
         return True
 
     if code == 'CSAP-MongoDB-02':
-        lines.append('    cmd="run_mongo_query \\"db.getSiblingDB(\\\'admin\\\').runCommand({usersInfo:1})\\" admin"')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="run_mongo_query \\"db.getSiblingDB(\\\'admin\\\').runCommand({usersInfo:1})\\" admin"')
         lines.append("    local users_output")
         lines.append("""    users_output=$(run_mongo_query 'var users = db.getSiblingDB("admin").runCommand({usersInfo:1}).users || []; users.map(function(u){ return u.user + " => " + (u.roles || []).map(function(r){ return r.role + "@" + r.db; }).join(", "); }).join("\\n")' admin)""")
         lines.append('    cur_state="${users_output:-결과 없음}"')
@@ -1315,7 +1480,7 @@ def _generate_mongodb_observation_check(lines, code, title):
         return True
 
     if code == 'CSAP-MongoDB-03':
-        lines.append('    cmd="grep -En \\"authorization|auth\\" ${MONGOD_CONF:-/etc/mongod.conf}"')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="grep -En \\"authorization|auth\\" ${MONGOD_CONF:-/etc/mongod.conf}"')
         lines.append('    local config_output')
         lines.append('    local active_auth')
         lines.append('    if [ -n "$MONGOD_CONF" ] && [ -f "$MONGOD_CONF" ]; then')
@@ -1337,7 +1502,7 @@ def _generate_mongodb_observation_check(lines, code, title):
         return True
 
     if code == 'CSAP-MongoDB-04':
-        lines.append('    cmd="run_mongo_query \\"db.getSiblingDB(\\\'admin\\\').runCommand({usersInfo:1})\\" admin"')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="run_mongo_query \\"db.getSiblingDB(\\\'admin\\\').runCommand({usersInfo:1})\\" admin"')
         lines.append("    local admin_users_output")
         lines.append("""    admin_users_output=$(run_mongo_query 'var users = db.getSiblingDB("admin").runCommand({usersInfo:1}).users || []; users.filter(function(u){ return (u.roles || []).some(function(r){ return ["root","userAdminAnyDatabase","dbAdminAnyDatabase","readWriteAnyDatabase","userAdmin","dbAdmin"].indexOf(r.role) !== -1; }); }).map(function(u){ return u.user + " => " + (u.roles || []).map(function(r){ return r.role + "@" + r.db; }).join(", "); }).join("\\n")' admin)""")
         lines.append('    cur_state="${admin_users_output:-결과 없음}"')
@@ -1351,7 +1516,7 @@ def _generate_mongodb_observation_check(lines, code, title):
         return True
 
     if code == 'CSAP-MongoDB-06':
-        lines.append('    cmd="run_mongo_query \\"db.adminCommand({getCmdLineOpts:1})\\" admin; grep -En \\"http|rest\\" ${MONGOD_CONF:-/etc/mongod.conf}"')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="run_mongo_query \\"db.adminCommand({getCmdLineOpts:1})\\" admin; grep -En \\"http|rest\\" ${MONGOD_CONF:-/etc/mongod.conf}"')
         lines.append('    local output')
         lines.append("""    output=$({ ( run_mongo_query 'db.adminCommand({getCmdLineOpts:1})' admin ); ( cfg="${MONGOD_CONF:-/etc/mongod.conf}"; [ -f "$cfg" ] && grep -Ein "http|rest" "$cfg" 2>/dev/null || echo "FILE_DEFAULT_GOOD|MongoDB 7 기본값은 HTTP interface 미사용입니다." ); } 2>/dev/null | sed '/^$/d' | head -20)""")
         lines.append('    cur_state="${output:-결과 없음}"')
@@ -1368,7 +1533,7 @@ def _generate_mongodb_observation_check(lines, code, title):
         return True
 
     if code == 'CSAP-MongoDB-07':
-        lines.append('    cmd="grep -En \\"bindIp|bindIpAll\\" ${MONGOD_CONF:-/etc/mongod.conf}"')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="grep -En \\"bindIp|bindIpAll\\" ${MONGOD_CONF:-/etc/mongod.conf}"')
         lines.append('    local bind_output')
         lines.append('    if [ -n "$MONGOD_CONF" ] && [ -f "$MONGOD_CONF" ]; then')
         lines.append('        bind_output=$(grep -Ein "bindIp|bindIpAll" "$MONGOD_CONF" 2>/dev/null | head -20)')
@@ -1391,7 +1556,7 @@ def _generate_mongodb_observation_check(lines, code, title):
         return True
 
     if code == 'CSAP-MongoDB-08':
-        lines.append('    cmd="grep -En \\"systemLog|path|destination\\" ${MONGOD_CONF:-/etc/mongod.conf}"')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="grep -En \\"systemLog|path|destination\\" ${MONGOD_CONF:-/etc/mongod.conf}"')
         lines.append('    local log_output')
         lines.append('    if [ -n "$MONGOD_CONF" ] && [ -f "$MONGOD_CONF" ]; then')
         lines.append('        log_output=$(grep -Ein "systemLog|path|destination" "$MONGOD_CONF" 2>/dev/null | head -20)')
@@ -1408,9 +1573,9 @@ def _generate_mongodb_observation_check(lines, code, title):
     return False
 
 
-def _generate_elasticsearch_special_check(lines, code):
+def _generate_elasticsearch_special_check(lines, code, preserve_guide_cmd=False):
     if code == 'CSAP-Elasticsearch-04':
-        lines.append('    cmd="grep -En \\"network.host|http.host\\" ${ES_CONF:-/usr/share/elasticsearch/config/elasticsearch.yml}"')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="grep -En \\"network.host|http.host\\" ${ES_CONF:-/usr/share/elasticsearch/config/elasticsearch.yml}"')
         lines.append('    local cfg')
         lines.append('    cfg="${ES_CONF:-/usr/share/elasticsearch/config/elasticsearch.yml}"')
         lines.append('    if [ -f "$cfg" ]; then')
@@ -1435,7 +1600,7 @@ def _generate_elasticsearch_special_check(lines, code):
         return True
 
     if code == 'CSAP-Elasticsearch-09':
-        lines.append('    cmd="ls -ld ${ES_LOG_DIR:-/usr/share/elasticsearch/logs}; ls ${ES_LOG_DIR:-/usr/share/elasticsearch/logs}/*.log"')
+        _append_special_cmd(lines, preserve_guide_cmd, '    cmd="ls -ld ${ES_LOG_DIR:-/usr/share/elasticsearch/logs}; ls ${ES_LOG_DIR:-/usr/share/elasticsearch/logs}/*.log"')
         lines.append('    local log_dir="${ES_LOG_DIR:-/usr/share/elasticsearch/logs}"')
         lines.append('    if [ -d "$log_dir" ]; then')
         lines.append('        local output')
@@ -2338,11 +2503,7 @@ def generate_ps_check_function(item):
 def _extract_windows_commands(diag):
     """Extract Windows CLI commands from diagnosis text."""
     commands = []
-    for line in diag.split('\n'):
-        stripped = line.strip()
-        if stripped.startswith('[') or stripped.startswith('※'):
-            continue
-        inline_cmd = extract_inline_command(stripped)
+    for inline_cmd in extract_commands_from_diagnosis(diag):
         if inline_cmd and any(keyword in inline_cmd.lower() for keyword in (
             'secedit', 'net user', 'net accounts', 'net localgroup administrators',
             'net share', 'wmic', 'auditpol', 'fsutil', 'reg query', 'sc query',

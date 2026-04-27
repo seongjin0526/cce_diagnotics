@@ -262,7 +262,7 @@ fi
 check_CSAP_Elasticsearch_01() {
     local status="양호"
     local detail=""
-    local cmd="cat /x-pack/users; cat /users; cat /search-guard-/sgconfig/sg_internal_"
+    local cmd="cat [Elasticsearch 설정 디렉터리]/x-pack/users; cat [Elasticsearch 설정 디렉터리]/users; cat [Elasticsearch 설치 디렉터리]/search-guard-버전/sgconfig/sg_internal_"
     local cur_state=""
     local remediation="￭ X-Pack 플러그인을 통해 설정 - Elasticsearch v5.x, v6.x 1) # [Elasticsearch 설치 디렉터리/bin/x-pack] ./users useradd '계정명' -r '계정권한' 실행 - Elasticsearch v7.0 이상 1) # vi [Elasticsearch 설정 디렉터리/elasticsearch.yml] 2) security 필드에 아래의 내용 추가 3) # [Elasticsearch 설치 디렉터리]/bin/elasticsearch-setup-passwords interactive 4) 사용자 계정 인증 및 인증 창 확인 # curl --user '사용자 계정':'패스워드' localhost:9200 입력 또는 검색창에 http://localhost:9200 입력 ￭ Search-Guard 플러그인을 통해 설정 - Elasticsearch v5.0 이상 1) # cd [Elasticsearch 설치 디렉터리]/bin/search-guard-*/tools를 통해 디렉터리 이동 2) # ./hash.sh 명령어를 통해 패스워드 해시값 생성 3) 출력된 해시값과 계정명을 [Elasticsearch 설치 디렉터리]/plugin/search-guard-*/ sgconfig/sg_internal_users.yml 설정 파일에 기입 ※ 띄어쓰기에 민감하므로 아래 예시된 그림과 같이 라인 간격을 맞춰야 함 4) [Elasticsearch 설치 디렉터리/bin/search-guard-*/sgconfig/sg_roles_mapping. yml 설정 파일에서 role과 계정 매핑 5) [Elasticsearch 설치 디렉터리/bin/search-guard-*/tools/sgadmin_demo.sh 스크립트를 실행하여 설정 적용"
 
@@ -323,13 +323,13 @@ check_CSAP_Elasticsearch_01() {
 check_CSAP_Elasticsearch_02() {
     local status="양호"
     local detail=""
-    local cmd="curl -u test:test123 -XGET http://localhost:9200/_xpack_security/user"
+    local cmd="curl -u test:test123 -XGET 'http://localhost:9200/_xpack_security/user'"
     local cur_state=""
     local remediation="￭ 디폴트 계정 삭제/비활성화 (X-Pack 사용 시) 1) 디폴트 계정을 비활성화하기 전 새로운 계정 생성 2) 관리자 권한 부여 3) 디폴트 계정 비활성화 ￭ 디폴트 계정 삭제/비활성화 (Search-Guard 사용 시) 1) 디폴트 계정을 비활성화하기 전 새로운 계정 생성 2) # [Elasticsearch 설치 디렉터리]/plugins/search-guard-*/sgconfig/sg_internal_ users.yml 파일을 수정하여 기존 관리자 계정 영역 삭제 및 신규 계정 및 패스워드 적용 3) # [Elasticsearch 설치 디렉터리]/plugins/search-guard-*/sgconfig/sg_roles_ mapping.yml 파일을 수정하여 기존 관리자 계정 삭제 및 신규 계정 적용"
 
     local output
     output=$({
-        ( curl -u test:test123 -XGET http://localhost:9200/_xpack_security/user )
+        ( curl -u test:test123 -XGET 'http://localhost:9200/_xpack_security/user' )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
 
@@ -384,7 +384,7 @@ check_CSAP_Elasticsearch_02() {
 check_CSAP_Elasticsearch_03() {
     local status="양호"
     local detail=""
-    local cmd="cat /x-paxk/user_roles; /bin/x-pack/elasticsearch-users list; cat /users_roles"
+    local cmd="cat [Elasticsda 설정 디렉터리]/x-paxk/user_roles 또는; [Elasticsearch 설치 디렉터리]/bin/x-pack/elasticsearch-users list; cat [Elasticsearch 설정 디렉터리]/users_roles 또는"
     local cur_state=""
     local remediation="- Elasticsearch v5.x, v6.x (X-Pack 플러그인 사용 시) 1) # [Elasticsearch 설치 디렉터리]/bin/x-pack/users userdel '계정명' 실행 - Elasticsearch v7.0 이상 (X-Pack 플러그인 사용 시) 1) # [Elasticsearch 설치 디렉터리]/bin/elasticsearch-users userdel <사용자 명> ￭ 설정 파일 및 명령어를 통해 변경 (SearchGuard 사용 시) - Elasticsearch 5.0 이상 SearchGuard 플러그인 사용 시 1) # [Elasticsearch 설치 디렉터리]/plugins/search-guard-*/sgconfig/sg_roles_ mapping.yml 파일을 수정하여 불필요한 계정 제거 2) # [Elasticsearch 설치 디렉터리]/plugins/search-guard-*/tools/sgadmin_demo. sh을 실행하여 설정 적용"
 
@@ -439,11 +439,10 @@ check_CSAP_Elasticsearch_03() {
 check_CSAP_Elasticsearch_04() {
     local status="양호"
     local detail=""
-    local cmd="cat /elasticsearch.yml | grep network.host"
+    local cmd="cat [Elasticsearch 디렉터리]/elasticsearch.yml | grep network.host"
     local cur_state=""
     local remediation="￭ Elasticsearch 설정 파일 안의 network.host 설정 변경 1) # vi cat [Elasticsearch 디렉터리]/elasticsearch.yml 2) network.host 인가된 IP로 변경"
 
-    cmd="grep -En \"network.host|http.host\" ${ES_CONF:-/usr/share/elasticsearch/config/elasticsearch.yml}"
     local cfg
     cfg="${ES_CONF:-/usr/share/elasticsearch/config/elasticsearch.yml}"
     if [ -f "$cfg" ]; then
@@ -473,7 +472,7 @@ check_CSAP_Elasticsearch_04() {
 check_CSAP_Elasticsearch_05() {
     local status="양호"
     local detail=""
-    local cmd="ls -ld"
+    local cmd="ls -ld [Elasticsearch 설치 디렉터리]"
     local cur_state=""
     local remediation="￭ Elasticsearch 설치 디렉터리 권한 750으로 변경 1) # chmod 750 [Elasticsearch 설치 디렉터리]"
 
@@ -522,7 +521,7 @@ check_CSAP_Elasticsearch_05() {
 check_CSAP_Elasticsearch_06() {
     local status="양호"
     local detail=""
-    local cmd="ls -ld /plugins"
+    local cmd="ls -ld [Elasticsearch 설치 디렉터리]/plugins"
     local cur_state=""
     local remediation="￭ Elasticsearch 플러그인 디렉터리 권한 750으로 변경 1) # chmod 750 [Elasticsearch 설치 디렉터리]/plugins"
 
@@ -619,7 +618,7 @@ check_CSAP_Elasticsearch_06() {
 check_CSAP_Elasticsearch_07() {
     local status="양호"
     local detail=""
-    local cmd="ls -l /elasticsearch.yml; ls -l /plugins/search-guard-*/sgconfig"
+    local cmd="ls -l [Elasticsearch 설정 디렉터리]/elasticsearch.yml; ls -l [Elasticsearch 설치 디렉터리]/plugins/search-guard-*/sgconfig 실행"
     local cur_state=""
     local remediation="￭ 설정 파일의 권한을 660 이하로 변경 1) # chmod 660 [Elasticsearch 디렉터리/elasticsearch.yml]"
 
@@ -740,7 +739,7 @@ check_CSAP_Elasticsearch_07() {
 check_CSAP_Elasticsearch_08() {
     local status="양호"
     local detail=""
-    local cmd="ls -l /plugins/search-guard-*/tools"
+    local cmd="ls -l [Elasticsearch 설정 디렉터리]/plugins/search-guard-*/tools"
     local cur_state=""
     local remediation="￭ Search-guard 스크립트 파일 권한을 750 이하로 변경 1) chmod 750 [Elasticsearch 디렉터리]/plugins/search-guard-*/tools/[Search- Guard 스크립트 파일]"
 
@@ -837,11 +836,10 @@ check_CSAP_Elasticsearch_08() {
 check_CSAP_Elasticsearch_09() {
     local status="양호"
     local detail=""
-    local cmd="cat /elasticsearch.yml | grep xpack.security.audit"
+    local cmd="cat [Elasticsearch 설정 디렉터리]/elasticsearch.yml | grep xpack.security.audit"
     local cur_state=""
     local remediation="￭ 감사로그 활성화 (Elasticsearch v7.0 이상 X-pack 사용) 1) # vi [Elasticsearch 설정 디렉터리]/elasticsearch.yml에 아래 내용 추가 2) elasticsearch 재시작 3) /var/log/elasticsearch 내 감사 로그 파일 생성 확인"
 
-    cmd="ls -ld ${ES_LOG_DIR:-/usr/share/elasticsearch/logs}; ls ${ES_LOG_DIR:-/usr/share/elasticsearch/logs}/*.log"
     local log_dir="${ES_LOG_DIR:-/usr/share/elasticsearch/logs}"
     if [ -d "$log_dir" ]; then
         local output
@@ -867,7 +865,7 @@ check_CSAP_Elasticsearch_09() {
 check_CSAP_Elasticsearch_10() {
     local status="양호"
     local detail=""
-    local cmd="/bin/elasticsearch -v; curl localhost:9200"
+    local cmd="[Elasticsearch 설치 디렉터리]/bin/elasticsearch -v; curl localhost:9200"
     local cur_state=""
     local remediation="￭ 보안 패치 적용 1) 보안 취약점이 존재하지 않는 버전으로 보안 패치를 적용해야 함 ※ 최신 버전을 사용하도록 권고하고 있으나 시스템 운영상 적용이 어려운 경우 최신이 아닌 취약점이 존재하지 않는 버전도 허용하고 있음"
 

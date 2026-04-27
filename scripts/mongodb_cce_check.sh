@@ -345,11 +345,10 @@ check_CSAP_MongoDB_02() {
 check_CSAP_MongoDB_03() {
     local status="양호"
     local detail=""
-    local cmd="수동점검 필요"
+    local cmd="cat [MongoDB 환경설정 파일] | grep auth (예시)"
     local cur_state=""
     local remediation="￭ 인증 옵션 사용 활성화 1) 환경설정 파일 내 security 필드 아래 authorization 값 enabled 설정 ※ MongoDB v3.0 이하에서는 auth=true로 설정 ￭ MongoDB 재구동 (예시) 1) # systemctl restart mongod ￭ 사용자 인증 확인 1) > db.auth(\"사용자 계정\", \"패스워드\");"
 
-    cmd="grep -En \"authorization|auth\" ${MONGOD_CONF:-/etc/mongod.conf}"
     local config_output
     local active_auth
     if [ -n "$MONGOD_CONF" ] && [ -f "$MONGOD_CONF" ]; then
@@ -399,7 +398,7 @@ check_CSAP_MongoDB_04() {
 check_CSAP_MongoDB_05() {
     local status="양호"
     local detail=""
-    local cmd="ls -al | grep mongo*; ls -al"
+    local cmd="ls -al [MongoDB 실행 파일] | grep \"mongo*\"; ls -al [MongoDB 설정 파일]"
     local cur_state=""
     local remediation="￭ 실행 파일, 설정 파일 소유자 수정 및 Others 실행 권한 제거 1) # chown dba:dba [file명] 2) # chmod 750 [file명]"
 
@@ -522,11 +521,10 @@ check_CSAP_MongoDB_06() {
 check_CSAP_MongoDB_07() {
     local status="양호"
     local detail=""
-    local cmd="수동점검 필요"
+    local cmd="cat [MongoDB 환경 설정 파일] | grep bind"
     local cur_state=""
     local remediation="￭ 환경 설정 파일에서 bindip 수정 1) # vi [MongoDB 환경 설정 파일] bindIp : 인가된 IP"
 
-    cmd="grep -En \"bindIp|bindIpAll\" ${MONGOD_CONF:-/etc/mongod.conf}"
     local bind_output
     if [ -n "$MONGOD_CONF" ] && [ -f "$MONGOD_CONF" ]; then
         bind_output=$(grep -Ein "bindIp|bindIpAll" "$MONGOD_CONF" 2>/dev/null | head -20)
@@ -554,11 +552,10 @@ check_CSAP_MongoDB_07() {
 check_CSAP_MongoDB_08() {
     local status="양호"
     local detail=""
-    local cmd="수동점검 필요"
+    local cmd="cat [MongoDB 환경 설정 파일] | grep path"
     local cur_state=""
     local remediation="￭ 정책 수립 1) 백업 정책을 수립하여 로그 파일을 관리 2) 주기적으로 로그 파일을 백업"
 
-    cmd="grep -En \"systemLog|path|destination\" ${MONGOD_CONF:-/etc/mongod.conf}"
     local log_output
     if [ -n "$MONGOD_CONF" ] && [ -f "$MONGOD_CONF" ]; then
         log_output=$(grep -Ein "systemLog|path|destination" "$MONGOD_CONF" 2>/dev/null | head -20)

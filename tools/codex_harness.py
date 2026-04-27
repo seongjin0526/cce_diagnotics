@@ -358,7 +358,7 @@ def check_docker_generation_harness() -> CheckResult:
     text = script_path.read_text(encoding="utf-8")
 
     required_snippets = (
-        'cmd="getent group docker dockerroot root; grep -E \\"^(docker|dockerroot|root):\\" /etc/group"',
+        'cmd="cat /etc/group | grep docker; cat /etc/group | grep root"',
         'extra_members=$(printf',
         'audit_target="/usr/bin/docker"',
         'audit_target="/var/lib/docker"',
@@ -563,9 +563,9 @@ def check_mongodb_observation_harness() -> CheckResult:
     required_snippets = (
         'cmd="run_mongo_query \\"db.adminCommand({listDatabases:1})\\" admin; run_mongo_query \\"db.getSiblingDB(...).getCollectionNames()\\" admin"',
         'cmd="run_mongo_query \\"db.getSiblingDB(\\\'admin\\\').runCommand({usersInfo:1})\\" admin"',
-        'cmd="grep -En \\"authorization|auth\\" ${MONGOD_CONF:-/etc/mongod.conf}"',
-        'cmd="grep -En \\"bindIp|bindIpAll\\" ${MONGOD_CONF:-/etc/mongod.conf}"',
-        'cmd="grep -En \\"systemLog|path|destination\\" ${MONGOD_CONF:-/etc/mongod.conf}"',
+        'grep -Ein "authorization|auth" "$MONGOD_CONF"',
+        'grep -Ein "bindIp|bindIpAll" "$MONGOD_CONF"',
+        'grep -Ein "systemLog|path|destination" "$MONGOD_CONF"',
     )
     for snippet in required_snippets:
         if snippet not in text:
@@ -609,6 +609,120 @@ def check_execution_trace_harness() -> CheckResult:
     return result
 
 
+def _decode_generated_assignment(raw: str, *, powershell: bool = False) -> str:
+    if powershell:
+        decoded = raw.replace('`"', '"').replace('`$', '$').replace('``', '`')
+    else:
+        decoded = raw.replace('\\"', '"').replace('\\$', '$').replace('\\\\', '\\')
+    return re.sub(r"\s+", " ", decoded).strip()
+
+
+def _normalize_generated_command(command: str) -> str:
+    from generate_scripts import normalize_guide_command_for_display
+
+    return normalize_guide_command_for_display(command.replace("\\$", "$"))
+
+
+def _extract_generated_command_assignments(path: Path, *, powershell: bool = False) -> dict[str, str]:
+    text = path.read_text(encoding="utf-8")
+    commands: dict[str, str] = {}
+    current_code = ""
+    assignments: list[str] = []
+
+    comment_re = re.compile(r"^#\s+([^:\n]+):") if not powershell else re.compile(r"^#\s+([^:\n]+):")
+    assignment_re = (
+        re.compile(r'^\s*\$cmd\s*=\s*"((?:[^"`]|`.)*)"')
+        if powershell
+        else re.compile(r'^\s*(?:local\s+)?cmd="((?:[^"\\]|\\.)*)"')
+    )
+    end_re = re.compile(r"^\s*}\s*$")
+
+    for line in text.splitlines():
+        comment_match = comment_re.match(line)
+        if comment_match:
+            current_code = comment_match.group(1).strip()
+            assignments = []
+            continue
+        if current_code:
+            assignment_match = assignment_re.match(line)
+            if assignment_match:
+                assignments.append(_decode_generated_assignment(assignment_match.group(1), powershell=powershell))
+            if "add_result " in line or "Add-Result " in line or end_re.match(line):
+                if assignments:
+                    commands[current_code] = assignments[-1]
+                if end_re.match(line):
+                    current_code = ""
+                    assignments = []
+
+    return commands
+
+
+def check_guide_command_source_harness() -> CheckResult:
+    result = CheckResult(name="Guide command source harness")
+    try:
+        from generate_scripts import (
+            APP_DEFS,
+            extract_commands_from_diagnosis,
+            is_state_changing_command,
+            read_excel_items,
+        )
+
+        items_by_target = read_excel_items()
+        checked_scripts = 0
+        checked_items = 0
+        guide_command_items = 0
+
+        for app_key, app_def in APP_DEFS.items():
+            script_path = REPO_ROOT / "scripts" / app_def["script"]
+            if not script_path.exists():
+                continue
+            checked_scripts += 1
+            generated = _extract_generated_command_assignments(script_path, powershell=bool(app_def.get("powershell")))
+            for item in items_by_target.get(app_key, []):
+                code = item["code"]
+                actual = generated.get(code)
+                if actual is None:
+                    result.ok = False
+                    result.details.append(f"{script_path.relative_to(REPO_ROOT)}:{code}: generated command field missing")
+                    continue
+
+                checked_items += 1
+                normalized_actual = _normalize_generated_command(actual)
+                if is_state_changing_command(normalized_actual):
+                    result.ok = False
+                    result.details.append(
+                        f"{script_path.relative_to(REPO_ROOT)}:{code}: diagnostic command contains remediation/state-changing work: {actual}"
+                    )
+
+                guide_commands = extract_commands_from_diagnosis(item["diagnosis"])
+                if not guide_commands:
+                    continue
+                guide_command_items += 1
+                expected = _normalize_generated_command("; ".join(guide_commands[:3]))
+                if normalized_actual != expected:
+                    result.ok = False
+                    result.details.append(
+                        f"{script_path.relative_to(REPO_ROOT)}:{code}: generated command differs from guide command. "
+                        f"expected={expected!r} actual={normalized_actual!r}"
+                    )
+
+        if result.ok:
+            result.details.append(
+                "Guide command source of truth enforced: generated command fields match workbook guide diagnosis commands."
+            )
+            result.details.append(
+                "Guide command source of truth enforced again: remediation/state-changing commands are rejected as diagnostics."
+            )
+            result.details.append(
+                f"Guide command source of truth rechecked across {checked_scripts} generated scripts, "
+                f"{checked_items} items, {guide_command_items} guide-command items."
+            )
+    except Exception as exc:  # noqa: BLE001
+        result.ok = False
+        result.details.append(str(exc))
+    return result
+
+
 def print_result(result: CheckResult) -> None:
     if result.skipped:
         status = "SKIP"
@@ -631,6 +745,7 @@ def main() -> int:
         check_k8s_runtime_harness(),
         check_mongodb_observation_harness(),
         check_execution_trace_harness(),
+        check_guide_command_source_harness(),
         scan_patterns("Legacy AI residue scan", TRACKED_TEXT_FORBIDDEN),
         scan_patterns("Hard-coded path scan", HARD_CODED_PATHS),
     ]

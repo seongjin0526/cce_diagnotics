@@ -621,13 +621,61 @@ check_ISMS_HV_01() {
 check_ISMS_HV_02() {
     local status="양호"
     local detail=""
-    local cmd="iptables -nL --line-number; IPTables IP; iptables -I RH-Firewall-1-INPUT 1 -p tcp -s --dport 22 -j"
+    local cmd="iptables -nL --line-number; IPTables 정책 목록을 통해 접속 IP 제한 설정 확인; iptables -I RH-Firewall-1-INPUT 2 -p tcp -s 0.0.0.0/0 --dport 22 -j DROP"
     local cur_state=""
     local remediation="호스트에서 제공하는 방화벽 애플리케이션을 이용하여 서비스 접속 허용 IP 등록 설정 [상세 조치 사례] l XenServer, KVM [IPTables를 통한 접근 통제] Step 1) 호스트 접속 \$ iptables -nL --line-number Chain INPUT (policy ACCEPT) num target prot opt source destination 1 xapi_nbd_input_chain tcp -- 0.0.0.0/0 0.0.0.0/0 tcp dpt:10809 2 ACCEPT 47 -- 0.0.0.0/0 0.0.0.0/0 3 RH-Firewall-1-INPUT all -- 0.0.0.0/0 0.0.0.0/0 … 중간 생략 … Chain RH-Firewall-1-INPUT (2 references) num target prot opt source destination 1 ACCEPT all -- 0.0.0.0/0 0.0.0.0/0 2 ACCEPT icmp -- 0.0.0.0/0 0.0.0.0/0 icmptype 255 3 ACCEPT udp -- 0.0.0.0/0 0.0.0.0/0 udp dpt:67 4 ACCEPT all -- 0.0.0.0/0 0.0.0.0/0 ctstate RELATED,ESTABLISHED 5 ACCEPT udp -- 0.0.0.0/0 0.0.0.0/0 ctstate NEW udp dpt:694 11. 가상화 장비 Step 2) IPTables 정책 목록을 통해 접속 IP 제한 설정 확인 Step 3) SSH 원격 접속을 허용된 IP로만 제한 \$ iptables -I RH-Firewall-1-INPUT 1 -p tcp -s <허용 IP> --dport 22 -j ACCEPT \$ iptables -I RH-Firewall-1-INPUT 2 -p tcp -s 0.0.0.0/0 --dport 22 -j DROP Step 4) IPTables의 변경된 정책 저장 및 서비스 재시작 \$ service iptables save \$ service iptables restart"
 
-    status="수동점검"
-    detail="서비스 상태 수동 확인 필요. 허용된 IP에서만 관리 콘솔 및 원격 접속이 가능하도록 제한된 경우"
-    cur_state="수동점검 필요"
+    local output
+    output=$({
+        ( iptables -nL --line-number )
+        ( IPTables IP )
+        ( iptables -I RH-Firewall-1-INPUT 2 -p tcp -s 0.0.0.0/0 --dport 22 -j DROP )
+    } 2>/dev/null | sed '/^$/d' | head -20)
+    cur_state="$output"
+
+    if [ -z "$output" ]; then
+        status="양호"
+        detail="허용된 IP에서만 관리 콘솔 및 원격 접속이 가능하도록 제한된 경우"
+    else
+        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="해당 파일이 없으므로 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
+            status="양호"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
+            local default_text
+            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
+            status="취약"
+            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
+        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
+            local missing_text
+            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
+            status="수동점검"
+            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
+        else
+        if output_has_negative_marker "$output"; then
+            status="양호"
+            detail="허용된 IP에서만 관리 콘솔 및 원격 접속이 가능하도록 제한된 경우"
+        elif output_has_positive_marker "$output"; then
+            status="취약"
+            detail="허용된 IP에서만 관리 콘솔 및 원격 접속이 가능하도록 제한되지 않은 경우"
+        else
+            status="취약"
+            detail="허용된 IP에서만 관리 콘솔 및 원격 접속이 가능하도록 제한되지 않은 경우"
+        fi
+        fi
+    fi
+    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
 
     add_result "ISMS-HV-02" "가상화 장비 > 1. 계정 관리" "가상화 장비 외부접속 차단" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
@@ -636,14 +684,13 @@ check_ISMS_HV_02() {
 check_ISMS_HV_04() {
     local status="양호"
     local detail=""
-    local cmd="grep /bin/bash /etc/passwd | cut -f1 -d:; userdel -r"
+    local cmd="grep /bin/bash /etc/passwd | cut -f1 -d:"
     local cur_state=""
     local remediation="불필요한 공용 계정 및 퇴사자 계정 제거 [상세 조치 사례] l XenServer, KVM Step 1) 호스트 접속 Step 2) 등록되어 있는 계정 확인 \$ grep /bin/bash /etc/passwd | cut -f1 -d: root user1 Step 3) 불필요한 계정이 존재하는 경우 해당 계정 삭제 \$ userdel -r <계정명>"
 
     local output
     output=$({
         ( get_process_snapshot "/bin/bash" )
-        ( userdel -r )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
 
@@ -690,14 +737,13 @@ check_ISMS_HV_04() {
 check_ISMS_HV_05() {
     local status="양호"
     local detail=""
-    local cmd="grep /bin/bash /etc/passwd | cut -f1 -d:; gpasswd -d user1 users"
+    local cmd="grep /bin/bash /etc/passwd | cut -f1 -d:"
     local cur_state=""
     local remediation="불필요한 권한이 부여된 계정에 대한 권한 제거 [상세 조치 사례] l KVM Step 1) 호스트에 접속 Step 2) bash 계정 목록 확인 \$ grep /bin/bash /etc/passwd | cut -f1 -d: root user1 Step 3) 불필요한 계정 제거 \$ gpasswd -d user1 users"
 
     local output
     output=$({
         ( get_process_snapshot "/bin/bash" )
-        ( gpasswd -d user1 users )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
 
@@ -798,11 +844,11 @@ check_ISMS_HV_07() {
 check_ISMS_HV_08() {
     local status="양호"
     local detail=""
-    local cmd="cat /etc/ssh/sshd_config | grep Banner; echo ptp_kvm > /etc/modules-load.d/ptp_kvm.conf; echo refclock PHC /dev/ptp0 poll 2 >> /etc/chrony.conf"
+    local cmd="cat /etc/ssh/sshd_config | grep \"Banner\""
     local cur_state=""
     local remediation="시스템 사용 주의사항 출력 설정 [상세 조치 사례] l KVM Step 1) 배너 설정 여부 확인 # cat /etc/ssh/sshd_config | grep \"Banner\" Step 2) /etc/sshd/sshd_config 파일에 배너 내용 삽입 # vi /etc/sshd/sshd_config Banner /etc/issue.net (예시) This system is for the use of authorized users only. l KVM Step 1) PHC 사용 여부 확인 Step 2) 사용하지 않으면 활성화 적용 # echo ptp_kvm > /etc/modules-load.d/ptp_kvm.conf Step 3) /dev/ptp0 시계를 chrony 구성에 대한 참조로 추가 설정 # echo \"refclock PHC /dev/ptp0 poll 2\" >> /etc/chrony.conf Step 4) chrony 데몬 다시 시작 # systemctl restart chronyd"
 
-    local config_file="/etc/modules-load.d/ptp_kvm.conf"
+    local config_file="/etc/ssh/sshd_config"
     # Expand wildcards/find actual config
     local actual_config
     actual_config=$(ls $config_file 2>/dev/null | head -1)
@@ -855,14 +901,13 @@ check_ISMS_HV_14() {
 check_ISMS_HV_15() {
     local status="양호"
     local detail=""
-    local cmd="cat /etc/libvirt/libvirtd.conf; log_level ="
+    local cmd="cat /etc/libvirt/libvirtd.conf"
     local cur_state=""
     local remediation="로그 기록 정책을 내부 정책에 부합하게 설정 [상세 조치 사례] l KVM Step 1) 호스트에 접속 Step 2) libvirt 설정파일을 확인하여 로그 레벨 확인 \$ cat /etc/libvirt/libvirtd.conf Step 3) libvirt 설정파일의 log_level 설정 구문 수정 \$ log_level = Step 4) 변경 사항 적용을 위해 libvirt 데몬 재시작 \$ systemctl restart libvirtd.service ※ log.level 설정값 레벨 로깅 수준 설명 ERROR 오류 메시지만 기록함 WARNING 경고 및 오류를 기록함 INFO 디버그 항목이 아닌 모든 항목을 기록함 DEBUG 디버그 항목 및 모든 항목을 기록함 836"
 
     local output
     output=$({
         ( cat /etc/libvirt/libvirtd.conf )
-        ( log_level = )
     } 2>/dev/null | sed '/^$/d' | head -20)
     cur_state="$output"
 

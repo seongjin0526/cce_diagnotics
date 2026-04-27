@@ -304,7 +304,7 @@ fi
 check_CSAP_PostgreSQL_07() {
     local status="양호"
     local detail=""
-    local cmd="postgres=# select usename, passwd from pg_shadow;; postgres=# SELECT usename, passwd FROM pg_shadow;; postgres=# CREATE USER password ' ';"
+    local cmd="postgres=# select usename, passwd from pg_shadow;; postgres=# SELECT usename, passwd FROM pg_shadow;"
     local cur_state=""
     local remediation="[클라우드 가이드] ￭ 명령어를 통해 안전한 암호화 알고리즘 적용 1) user 생성 시 적용 postgres=# CREATE user 계정명 PASSWORD '설정할 패스워드'; 2) 기존 user 적용 postgres=# AlTER user 계정명 WITH PASSWORD '설정할 패스워드'; ※ default 설정으로 SCRAM-SHA-256 암호화 알고리즘이 적용 ※ peer : 로컬에서만 연결이 가능하며 OS에서 클라이언트의 OS 사용자 이름을 얻고 요청한 데이터베이스 사용자 이름과 일치하는지 확인하는 인증 방식 [주요기반시설 가이드] SHA-256 이상의 암호화 알고리즘 적용 [상세 조치 사례] l PostgreSQL Step 1) psql 접속 후 계정별 암호화 알고리즘 확인 postgres=# SELECT usename, passwd FROM pg_shadow; Step 2) 명령어를 통한 알고리즘 적용 - user 생성 시 적용 postgres=# CREATE USER 계정명 password '설정할 비밀번호'; - 기존 user 적용 postgres=# ALTER USER 계정명 WITH password '설정할 비밀번호'; ※ default 설정으로 SCRAM-SHA-256 암호화 알고리즘이 적용 ※ peer : 로컬에서만 연결이 가능하며 OS에서 클라이언트의 OS 사용자 이름을 얻고 요청한 데이터베이스 사용자 이름과 일치하는지 확인하는 인증 방식 08. DBMS 625"
 
@@ -591,7 +591,7 @@ check_CSAP_PostgreSQL_04() {
 check_CSAP_PostgreSQL_05() {
     local status="양호"
     local detail=""
-    local cmd="cat / | grep listen_address; cat / | grep -v #"
+    local cmd="cat /[postgresql 설치 디렉터리/postgresql.conf] | grep listen_address; cat /[postgresql 설치 디렉터리/pg_hba.conf] | grep -v \"#\""
     local cur_state=""
     local remediation="￭ postgresql.conf 수정 1) 인가된 IP 주소로 수정 (예시) 2) 적용 후, PostgreSQL 재시작 # systemctl restart postgresql.service ￭ pg_hba.conf 수정 1) 인가된 IP 주소로 수정 2) 적용 후, PostgreSQL 재시작 # systemctl restart postgresql.service"
 
@@ -661,7 +661,7 @@ check_CSAP_PostgreSQL_05() {
 check_CSAP_PostgreSQL_06() {
     local status="양호"
     local detail=""
-    local cmd="run_psql_query \"SELECT line_number, type, address, auth_method FROM pg_hba_file_rules ORDER BY line_number;\" postgres"
+    local cmd="cat [postgresql 설치 디렉터리/pg_hba.conf] | grep -v \"#\""
     local cur_state=""
     local remediation="￭ pg_hba.conf 수정 1) METHOD 필드 안전한 인증 방식으로 수정"
 
@@ -722,7 +722,7 @@ check_CSAP_PostgreSQL_06() {
 check_CSAP_PostgreSQL_08() {
     local status="양호"
     local detail=""
-    local cmd="ls -ld"
+    local cmd="ls -ld [PostgreSQL [데이터 디렉터리]"
     local cur_state=""
     local remediation="￭ 명령어를 통해 접근 권한 변경 1) # chmod 700 [PostgreSQL 데이터 디렉터리]"
 
@@ -771,7 +771,7 @@ check_CSAP_PostgreSQL_08() {
 check_CSAP_PostgreSQL_09() {
     local status="양호"
     local detail=""
-    local cmd="ls -al"
+    local cmd="ls -al [PostgreSQL 환경설정 파일]"
     local cur_state=""
     local remediation="￭ 명령어를 통해 접근 권한 변경 1) # chmod 600 [PostgreSQL 환경설정 파일]"
 
@@ -820,7 +820,7 @@ check_CSAP_PostgreSQL_09() {
 check_CSAP_PostgreSQL_10() {
     local status="양호"
     local detail=""
-    local cmd="run_psql_query \"SHOW logging_collector;\" postgres; run_psql_query \"SHOW log_destination;\" postgres"
+    local cmd="cat [PostgreSQL [PostgreSQL 환경설정 파일] | grep log_statement"
     local cur_state=""
     local remediation="￭ 명령어를 통해 접근 권한 변경 (예시) 1) # chmod 600 [PostgreSQL 환경 설정 파일]"
 
@@ -935,60 +935,13 @@ check_CSAP_PostgreSQL_11() {
 check_ISMS_D_01() {
     local status="양호"
     local detail=""
-    local cmd="sudo -u postgres psql; ALTER USER postgres WITH PASSWORD ' ';"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="기본(관리자) 계정의 초기 비밀번호 및 권한 정책 변경 [상세 조치 사례] l PostgreSQL Step 1) postgres 계정으로 접속 계정 변경 및 접속 \$ sudo –u postgres psql # ALTER USER postgres WITH PASSWORD '신규 비밀번호'; # \\q"
 
-    local output
-    output=$({
-        ( sudo -u postgres psql )
-        ( ALTER USER postgres WITH PASSWORD ' '; )
-    } 2>/dev/null | sed '/^$/d' | head -20)
-    cur_state="$output"
-
-    if [ -z "$output" ]; then
-        status="N/A"
-        detail="명령 실행 결과 없음 또는 대상 미설치. "
-    else
-        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="해당 파일이 없으므로 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
-            local missing_text
-            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
-            status="수동점검"
-            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
-        else
-        if output_has_negative_marker "$output"; then
-            status="양호"
-            detail="기본 계정의 초기 비밀번호를 변경하거나 잠금설정한 경우"
-        elif output_has_positive_marker "$output"; then
-            status="취약"
-            detail="기본 계정의 초기 비밀번호 를 변경하지 않거나 잠금설정을 하지 않은 경우"
-        else
-            status="취약"
-            detail="기본 계정의 초기 비밀번호 를 변경하지 않거나 잠금설정을 하지 않은 경우"
-        fi
-        fi
-    fi
-    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
+    status="수동점검"
+    detail="수동 점검 필요 항목입니다. 기본 계정의 초기 비밀번호를 변경하거나 잠금설정한 경우"
+    cur_state="수동점검 필요"
 
     add_result "ISMS-D-01" "DBMS > 1. 계정 관리" "기본 계정의 비밀번호, 정책 등을 변경하여 사용" "상" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
@@ -1050,7 +1003,7 @@ check_ISMS_D_02() {
 check_ISMS_D_03() {
     local status="양호"
     local detail=""
-    local cmd="mysql> SHOW VARIABLES LIKE 'validate_password%';; mysql> INSTALL COMPONENT 'file://component_validate_password';; mysql> SHOW VARIABLES LIKE 'default_password_lifetime';"
+    local cmd="mysql> SHOW VARIABLES LIKE 'validate_password%';; mysql> SHOW VARIABLES LIKE 'default_password_lifetime';; mysql> SET GLOBAL default_password_lifetime=90;"
     local cur_state=""
     local remediation="기관 정책에 맞게 비밀번호 사용 기간 및 복잡도 정책 설정 [상세 조치 사례] l Oracle DB Step 1) PASSWORD_LIFE_TIME Profile 파라미터 변경 SQL> ALTER PROFILE <프로파일명> LIMIT PASSWORD_LIFE_TIME xx; Step 2) Profile 값과 관련된 사용자 변경 SQL> ALTER PROFILE <계정명> PROFILE <변경할 프로파일명>; Step 3) 비밀번호 정책 설정 변경 SQL> ALTER PROFILE <프로파일명> LIMIT FAILED_LOGIN_ATTEMPTS 3 (비밀번호 실패 3번 까지만 가능) PASSWORD_LIFE_TIME 30 (30일 동안만 비밀번호 사용 가능 PASSWORD_REUSE_TIME 30 (사용한 비밀번호 30일 후부터 재사용 가능) PASSWORD_VERIFY_FUNCTION verify_function (비밀번호 복잡성 검증) PASSWORD_GRACE_TIME 5; (life time이 끝나고 5일 동안 메시지를 보여줌) l MSSQL Step 1) 비밀번호 변경 주기는 '암호 만료 강제 적용'을 적용함으로써 주기적으로 변경할 수 있으며, 변경 기간은 OS의 '암호 정책'에서 적용받으므로 '암호 정책 > 최대 암호 사용 기간' 설정도 변경해야 함 Step 2) 암호 만료 강제 적용 보안 > 로그인 > 각 로그인 계정 > 속성 > \"암호 만료 강제 적용\" 설정 [ 암호 만료 강제 적용 설정 ] Step 3) OS 암호 정책 설정 [관리 도구] > [로컬 보안 정책] > [보안 설정] > [계정 정책] > [암호 정책] > 최대 암호 사용 기간 : '60일' 설정 [ 최대 암호 사용 기간 설정 ] l MySQL [비밀번호 복잡도 정책 설정] Step 1) 비밀번호 정책 확인 08. DBMS mysql> SHOW VARIABLES LIKE 'validate_password%'; ※ component_validate_password가 설치되어 있지 않은 경우 아래와 같이 해당 컴포넌트 설치 mysql> INSTALL COMPONENT 'file://component_validate_password'; Step 2) 비밀번호 정책 설정 다음과 같은 방법으로 각각의 비밀번호 정책을 설정 SET GLOBAL validate_password.policy = 'MEDIUM'; (비밀번호 정책의 강도 LOW/MEDIUM/STRONG) SET GLOBAL validate_password.length = 8; (비밀번호 최소 길이) SET GLOBAL validate_password.mixed_case_count = 1; (포함되어야 하는 영문 대소문자 최소 개수) SET GLOBAL validate_password.number_count = 1; (포함되어야 하는 숫자 최소 개수) SET GLOBAL validate_password.special_char_count = 1; (포함되어야 하는 특수문자 최소 개수) ※ Linux계열(/etc/my.cnf 또는 /etc/mysql/my.cnf), Windows(C:\\ProgramData\\MySQL\\MySQL Server <설치된 버전>\\my.ini)의 <mysqld> 섹션에 설정을 추가하여 정책 설정 가능 ※ 비밀번호 신규 적용 및 초기화 시 설정 규칙에 맞추어 관리하고, 저장 시에는 일방향 암호화 알고리즘을 통해 암호화 처리(One-Way Encryption)함 [비밀번호 LifeTime 정책 적용 ] Step 1) 비밀번호 정책 확인 mysql> SHOW VARIABLES LIKE 'default_password_lifetime'; Step 2) 비밀번호 LifeTime 설정 mysql> SET GLOBAL default_password_lifetime=90; ※ 기본 값 - 5.7.11 이전 버전 : 0 - 5.7.11 이후 버전 및 8.0 이후 버전 : 360 Step 3) 정책 적용전에 생성된 계정의 LifeTime 변경 mysql> ALTER USER <계정명>'@'<호스트명 or IP>' PASSWORD EXPIRE INTERVAL 91 DAY; l Altibase Step 1) 다음 명령어를 통해 비밀번호 정책 설정 여부 확인 SELECT * FROM system_.sys_users_; Step 2) 아래 Property에 대해 비밀번호 정책 설정 CASE_SENSITIVE_PASSWORD = 1 FAILED_LOGIN_ATTEMPTS PASSWORD_LOCK_TIME PASSWORD_LIFE_TIME PASSWORD_GRACE_TIME PASSWORD_REUSE_TIME PASSWORD_REUSE_MAX PASSWORD_VERIFY_FUNCTION 정책 적용 시 다음 명령어를 사용 ALTER USER 계정명 LIMIT (Property 숫자); 예시) ALTER USER TESTUSER LIMIT (FAILED_LOGIN_ATTEMPTS 7, PASSWORD_LOCK_TIM E 7); l Tibero Step 1) 사용자별 비밀번호 PROFILE 적용 여부 확인 비밀번호 설정 규칙에 맞추어 비밀번호를 설정할 수 있도록 시스템 차원에서 기능 제공 SELECT * FROM dba_users; [ 사용자별 비밀번호 PROFILE 적용 여부 확인 ] Step 2) 설정되어 있을 경우 PROFILE 설정 내용 확인 SELECT * FROM dba_profiles; 08. DBMS [ PROFILE 설정 내용 확인 ] Step 3) 설정되어 있지 않을 경우 PROFILE 생성 또는 수정 시(ALTER PROFILE) 비밀번호 정책 설정 적용 시 다음 명령어를 사용 CREATE PROFILE prof LIMIT 예시) CREATE PROFILE prof LIMIT failed_login_attempts 3 password_lock_time 1/1440 password_life_time 90 password_reuse_time unlimited password_reuse_max 10 password_grace_time 10 password_verify_function verify_function; 608"
 
@@ -1166,51 +1119,13 @@ check_ISMS_D_04() {
 check_ISMS_D_06() {
     local status="양호"
     local detail=""
-    local cmd="\\du"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="사용자별 계정 생성 및 권한 부여 [상세 조치 사례] l PostgreSQL Step 1) 모든 사용자 확인 쿼리문 조회 : SELECT * FROM pg_shadow; 명령어 조회 : \\du Step 2) 불필요 계정 삭제 DROP ROLE '삭제할 계정'; Step 3) 계정 생성 및 권한 추가 CREATE USER '생성할 계정'; ALTER ROLE '계정명' '권한명' '권한명' ····; \\du (계정 생성 및 권한 확인) ※ 계정의 용도 파악 후 불필요한 계정은 삭제, 새로운 계정 생성 시 적절한 권한을 부여하여 생성 08. DBMS 619"
 
-    local output
-    output=$({
-        ( run_psql_query "\\du" )
-    } 2>/dev/null | sed '/^$/d' | head -20)
-    cur_state="$output"
-
-    if [ -z "$output" ]; then
-        status="N/A"
-        detail="명령 실행 결과 없음 또는 대상 미설치. "
-    else
-        if printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="해당 파일이 없으므로 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="해당 파일이 없으므로 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_GOOD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_GOOD|//p' | head -1)
-            status="양호"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 양호 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^SETTING_DEFAULT_BAD|"; then
-            local default_text
-            default_text=$(printf '%s\n' "$output" | sed -n 's/^SETTING_DEFAULT_BAD|//p' | head -1)
-            status="취약"
-            detail="설정이 명시되지 않아 기본값 설정에 의해 취약 - ${default_text}"
-        elif printf '%s\n' "$output" | grep -q "^FILE_MISSING|"; then
-            local missing_text
-            missing_text=$(printf '%s\n' "$output" | sed -n 's/^FILE_MISSING|//p' | head -1)
-            status="수동점검"
-            detail="설정 파일이 없어 기본값 판정을 확정하지 못했습니다. ${missing_text}"
-        else
-        status="수동점검"
-        detail="명령 결과는 수집했지만 운영 정책/최신 기준 대조가 필요합니다. "
-        fi
-    fi
-    [ -n "$output" ] && [ -n "$(summarize_output "$output")" ] && detail="${detail} 결과: $(summarize_output "$output")"
+    status="수동점검"
+    detail="수동 점검 필요 항목입니다. 사용자별 계정을 사용하고 있는 경우"
+    cur_state="수동점검 필요"
 
     add_result "ISMS-D-06" "DBMS > 1. 계정 관리" "DB 사용자 계정을 개별적으로 부여하여 사용" "중" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
@@ -1342,167 +1257,13 @@ check_ISMS_D_11() {
 check_ISMS_D_14() {
     local status="양호"
     local detail=""
-    local cmd="chmod 640 /postgresql.conf; chmod 640 ./pg_hba.conf; chmod 640 ./pg_ident.conf"
+    local cmd="수동점검 필요"
     local cur_state=""
     local remediation="주요 설정 파일 및 디렉터리의 권한 설정 변경 [상세 조치 사례] l PostgreSQL [Unix OS] Step 1) 주요 설정 파일 위치 확인 postgresql.conf 파일 위치: [\$datadir] DB 접속 통제 설정 파일 위치: /postgres/data/pg_hba.conf, /postgres/data/pg_ident.conf log_directory : /log_directory/pg_log Step 2) 주요 설정 파일의 권한 설정 환경설정 파일(postgresql.conf)의 권한을 640 이하로 설정 # chmod 640 [\$datadir]/postgresql.conf DB접속 통제 설정 파일(pg_hba.conf, pg_ident.conf)의 권한을 640 이하로 설정 # chmod 640 ./pg_hba.conf # chmod 640 ./pg_ident.conf 히스토리 파일 (.psql_history)의 권한을 600 이하로 설정 \$chmod 600 .psql_history Log 파일(pg_log)의 권한을 640 이하로 설정 #chmod 640 [Log 파일] [Windows OS] Step 1) 주요 환경설정 파일의 접근 권한은 Administrators, SYSTEM, Owner에게 모든 권한 또는 필요 권한만 부여하여 설정하고 기타 다른 그룹은 권한 제거"
 
-    local vuln_found=false
-    local checked_any=false
-    local missing_only=true
-    local target_spec_1
-    target_spec_1=/postgresql.conf
-    local resolved_target_1
-    resolved_target_1="$target_spec_1"
-    if [ -n "$resolved_target_1" ]; then
-        for target_path in $resolved_target_1; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_1
-                result_1=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_1; "
-                case "$result_1" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_1). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_1). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_2
-    target_spec_2=/pg_hba.conf
-    local resolved_target_2
-    resolved_target_2="$target_spec_2"
-    if [ -n "$resolved_target_2" ]; then
-        for target_path in $resolved_target_2; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_2
-                result_2=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_2; "
-                case "$result_2" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_2). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_2). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_3
-    target_spec_3=/pg_ident.conf
-    local resolved_target_3
-    resolved_target_3="$target_spec_3"
-    if [ -n "$resolved_target_3" ]; then
-        for target_path in $resolved_target_3; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_3
-                result_3=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_3; "
-                case "$result_3" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_3). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_3). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_4
-    target_spec_4=/postgres/data/pg_hba.conf
-    local resolved_target_4
-    resolved_target_4="$target_spec_4"
-    if [ -n "$resolved_target_4" ]; then
-        for target_path in $resolved_target_4; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_4
-                result_4=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_4; "
-                case "$result_4" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_4). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_4). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_5
-    target_spec_5=/postgres/data/pg_ident.conf
-    local resolved_target_5
-    resolved_target_5="$target_spec_5"
-    if [ -n "$resolved_target_5" ]; then
-        for target_path in $resolved_target_5; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_5
-                result_5=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_5; "
-                case "$result_5" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_5). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_5). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    local target_spec_6
-    target_spec_6=${PG_CONF:-${PG_DATA:-/var/lib/postgresql/data}/postgresql.conf}
-    local resolved_target_6
-    resolved_target_6="$target_spec_6"
-    if [ -n "$resolved_target_6" ]; then
-        for target_path in $resolved_target_6; do
-            [ -z "$target_path" ] && continue
-            checked_any=true
-            if [ -e "$target_path" ]; then
-                missing_only=false
-                local result_6
-                result_6=$(check_file_owner_perm "$target_path" "" "644")
-                cur_state+="$target_path: $result_6; "
-                case "$result_6" in
-                    VULN*) vuln_found=true; detail+="$target_path 권한 부적절($result_6). " ;;
-                    GOOD*) detail+="$target_path 권한 적절($result_6). " ;;
-                    NOT_FOUND) detail+="$target_path 파일 없음. " ;;
-                esac
-            else
-                detail+="$target_path 파일 없음. "
-                cur_state+="$target_path: 파일 없음; "
-            fi
-        done
-    fi
-    if [ "$vuln_found" = "true" ]; then
-        status="취약"
-    elif [ "$checked_any" = "false" ]; then
-        status="수동점검"
-        detail="점검 대상 파일 경로를 자동으로 해석하지 못했습니다. "
-        cur_state="경로 자동 해석 실패"
-    elif [ "$missing_only" = "true" ]; then
-        status="N/A"
-    fi
-    [ -z "$detail" ] && detail="주요 설정 파일 및 디렉터리의 권한 설정 시 일반 사용자의 수정 권한을 제거한 경우" && cur_state="점검 대상 파일 없음"
+    status="수동점검"
+    detail="수동 점검 필요 항목입니다. 주요 설정 파일 및 디렉터리의 권한 설정 시 일반 사용자의 수정 권한을 제거한 경우"
+    cur_state="수동점검 필요"
 
     add_result "ISMS-D-14" "DBMS > 2. 접근 관리" "데이터베이스의 주요 설정 파일, 비밀번호 파일 등과 같은 주요 파일들의 접근 권한이 적절하게 설정" "중" "$status" "$detail" "주요기반시설" "$cmd" "$cur_state" "$remediation"
 }
