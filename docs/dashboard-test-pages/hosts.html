@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>호스트 관리</title>
+  
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <a class="brand" href="dashboard.html">CCE Dashboard</a>
+      <p class="subtitle">원격 탐지, 진단 수행, 예외 승인, 가이드 카탈로그</p>
+    </div>
+    
+    <nav class="nav">
+      <a href="dashboard.html">대시보드</a>
+      <a href="hosts.html">호스트</a>
+      <a href="controls.html">취약점 카탈로그</a>
+      
+      <a href="approvals.html">예외 승인</a>
+      
+      <span class="user-pill">security / 보안담당자</span>
+      <a href="login.html">로그아웃</a>
+    </nav>
+    
+  </header>
+
+  <main class="page">
+    
+      
+    
+    
+<section class="layout-two">
+  <article class="panel">
+    <h2>호스트 등록</h2>
+    <form method="post" class="stack-form">
+      <label>표시 이름<input type="text" name="name" required></label>
+      <label>주소 또는 별칭<input type="text" name="address" required></label>
+      <label>포트<input type="number" name="port" value="22" required></label>
+      <label>원격 사용자<input type="text" name="remote_user" placeholder="ssh user"></label>
+      <label>전송방식
+        <select name="transport">
+          <option value="ssh">ssh</option>
+          <option value="local">local</option>
+          <option value="compose">compose</option>
+        </select>
+      </label>
+      <label class="inline-check"><input type="checkbox" name="use_sudo"> sudo로 진단 스크립트 실행</label>
+      <label>메모<textarea name="notes" rows="4"></textarea></label>
+      <button type="submit">호스트 저장</button>
+    </form>
+    <p class="dim">현재 대시보드는 Linux/Unix POSIX 호스트만 등록 대상으로 가정합니다. `compose`는 `docker/test-lab/compose.yml` 서비스명을 주소에 넣어 테스트 랩 컨테이너를 직접 진단할 때 사용합니다.</p>
+  </article>
+
+  <article class="panel">
+    <h2>등록 호스트</h2>
+    <table>
+      <thead>
+        <tr><th>이름</th><th>주소</th><th>전송방식</th><th>마지막 탐지</th><th></th></tr>
+      </thead>
+      <tbody>
+        
+        <tr>
+          <td>[LAB] K8s(Worker)</td>
+          <td>k3s-agent-lab:22</td>
+          <td>compose / posix</td>
+          <td>2026-04-18 16:52:15</td>
+          <td><a href="hosts.html">열기</a></td>
+        </tr>
+        
+        <tr>
+          <td>[LAB] K8s(Master)</td>
+          <td>k3s-server-lab:22</td>
+          <td>compose / posix</td>
+          <td>2026-04-18 16:52:13</td>
+          <td><a href="hosts.html">열기</a></td>
+        </tr>
+        
+        <tr>
+          <td>[LAB] Docker</td>
+          <td>docker-lab:22</td>
+          <td>compose / posix</td>
+          <td>2026-04-18 16:52:10</td>
+          <td><a href="hosts.html">열기</a></td>
+        </tr>
+        
+        <tr>
+          <td>[LAB] MS-SQL</td>
+          <td>mssql-lab:22</td>
+          <td>compose / posix</td>
+          <td>2026-04-18 16:52:08</td>
+          <td><a href="hosts.html">열기</a></td>
+        </tr>
+        
+        <tr>
+          <td>[LAB] Elasticsearch</td>
+          <td>elasticsearch-lab:22</td>
+          <td>compose / posix</td>
+          <td>2026-04-18 16:52:06</td>
+          <td><a href="hosts.html">열기</a></td>
+        </tr>
+        
+        <tr>
+          <td>[LAB] MongoDB</td>
+          <td>mongodb-lab:22</td>
+          <td>compose / posix</td>
+          <td>2026-04-18 16:52:02</td>
+          <td><a href="hosts.html">열기</a></td>
+        </tr>
+        
+        <tr>
+          <td>[LAB] Redis</td>
+          <td>redis-lab:22</td>
+          <td>compose / posix</td>
+          <td>2026-04-18 16:52:00</td>
+          <td><a href="hosts.html">열기</a></td>
+        </tr>
+        
+        <tr>
+          <td>[LAB] PostgreSQL</td>
+          <td>postgresql-lab:22</td>
+          <td>compose / posix</td>
+          <td>2026-04-18 16:51:59</td>
+          <td><a href="hosts.html">열기</a></td>
+        </tr>
+        
+        <tr>
+          <td>[LAB] MY-SQL</td>
+          <td>mysql-lab:22</td>
+          <td>compose / posix</td>
+          <td>2026-04-18 16:51:57</td>
+          <td><a href="hosts.html">열기</a></td>
+        </tr>
+        
+        <tr>
+          <td>[LAB] NodeJS</td>
+          <td>nodejs-lab:22</td>
+          <td>compose / posix</td>
+          <td>2026-04-18 16:51:55</td>
+          <td><a href="hosts.html">열기</a></td>
+        </tr>
+        
+        <tr>
+          <td>[LAB] PHP</td>
+          <td>php-lab:22</td>
+          <td>compose / posix</td>
+          <td>2026-04-18 16:51:52</td>
+          <td><a href="hosts.html">열기</a></td>
+        </tr>
+        
+        <tr>
+          <td>[LAB] Tomcat</td>
+          <td>tomcat-lab:22</td>
+          <td>compose / posix</td>
+          <td>2026-04-18 16:51:49</td>
+          <td><a href="hosts.html">열기</a></td>
+        </tr>
+        
+        <tr>
+          <td>[LAB] Nginx</td>
+          <td>nginx-lab:22</td>
+          <td>compose / posix</td>
+          <td>2026-04-18 16:51:47</td>
+          <td><a href="hosts.html">열기</a></td>
+        </tr>
+        
+        <tr>
+          <td>[LAB] Apache</td>
+          <td>apache-lab:22</td>
+          <td>compose / posix</td>
+          <td>2026-04-18 16:51:45</td>
+          <td><a href="hosts.html">열기</a></td>
+        </tr>
+        
+        <tr>
+          <td>x</td>
+          <td>y:22</td>
+          <td>compose / posix</td>
+          <td>-</td>
+          <td><a href="hosts.html">열기</a></td>
+        </tr>
+        
+      </tbody>
+    </table>
+  </article>
+</section>
+
+  </main>
+</body>
+</html>

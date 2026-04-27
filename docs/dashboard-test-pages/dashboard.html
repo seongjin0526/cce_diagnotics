@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>대시보드</title>
+  
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <a class="brand" href="dashboard.html">CCE Dashboard</a>
+      <p class="subtitle">원격 탐지, 진단 수행, 예외 승인, 가이드 카탈로그</p>
+    </div>
+    
+    <nav class="nav">
+      <a href="dashboard.html">대시보드</a>
+      <a href="hosts.html">호스트</a>
+      <a href="controls.html">취약점 카탈로그</a>
+      
+      <a href="approvals.html">예외 승인</a>
+      
+      <span class="user-pill">security / 보안담당자</span>
+      <a href="login.html">로그아웃</a>
+    </nav>
+    
+  </header>
+
+  <main class="page">
+    
+      
+    
+    
+<section class="grid-summary">
+  <article class="summary-card"><span>등록 호스트</span><strong>15</strong></article>
+  <article class="summary-card"><span>탐지 실행</span><strong>14</strong></article>
+  <article class="summary-card"><span>진단 실행</span><strong>14</strong></article>
+  <article class="summary-card"><span>대기 승인</span><strong>0</strong></article>
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <h2>최근 호스트</h2>
+    <a class="button-link" href="hosts.html">호스트 관리</a>
+  </div>
+  <table>
+    <thead>
+      <tr><th>이름</th><th>주소</th><th>전송방식</th><th>셸</th><th>마지막 탐지</th><th></th></tr>
+    </thead>
+    <tbody>
+      
+      <tr>
+        <td>[LAB] K8s(Worker)</td>
+        <td>k3s-agent-lab:22</td>
+        <td>compose</td>
+        <td>posix</td>
+        <td>2026-04-18 16:52:15</td>
+        <td><a href="hosts.html">상세</a></td>
+      </tr>
+      
+      <tr>
+        <td>[LAB] K8s(Master)</td>
+        <td>k3s-server-lab:22</td>
+        <td>compose</td>
+        <td>posix</td>
+        <td>2026-04-18 16:52:13</td>
+        <td><a href="hosts.html">상세</a></td>
+      </tr>
+      
+      <tr>
+        <td>[LAB] Docker</td>
+        <td>docker-lab:22</td>
+        <td>compose</td>
+        <td>posix</td>
+        <td>2026-04-18 16:52:10</td>
+        <td><a href="hosts.html">상세</a></td>
+      </tr>
+      
+      <tr>
+        <td>[LAB] MS-SQL</td>
+        <td>mssql-lab:22</td>
+        <td>compose</td>
+        <td>posix</td>
+        <td>2026-04-18 16:52:08</td>
+        <td><a href="hosts.html">상세</a></td>
+      </tr>
+      
+      <tr>
+        <td>[LAB] Elasticsearch</td>
+        <td>elasticsearch-lab:22</td>
+        <td>compose</td>
+        <td>posix</td>
+        <td>2026-04-18 16:52:06</td>
+        <td><a href="hosts.html">상세</a></td>
+      </tr>
+      
+      <tr>
+        <td>[LAB] MongoDB</td>
+        <td>mongodb-lab:22</td>
+        <td>compose</td>
+        <td>posix</td>
+        <td>2026-04-18 16:52:02</td>
+        <td><a href="hosts.html">상세</a></td>
+      </tr>
+      
+      <tr>
+        <td>[LAB] Redis</td>
+        <td>redis-lab:22</td>
+        <td>compose</td>
+        <td>posix</td>
+        <td>2026-04-18 16:52:00</td>
+        <td><a href="hosts.html">상세</a></td>
+      </tr>
+      
+      <tr>
+        <td>[LAB] PostgreSQL</td>
+        <td>postgresql-lab:22</td>
+        <td>compose</td>
+        <td>posix</td>
+        <td>2026-04-18 16:51:59</td>
+        <td><a href="hosts.html">상세</a></td>
+      </tr>
+      
+      <tr>
+        <td>[LAB] MY-SQL</td>
+        <td>mysql-lab:22</td>
+        <td>compose</td>
+        <td>posix</td>
+        <td>2026-04-18 16:51:57</td>
+        <td><a href="hosts.html">상세</a></td>
+      </tr>
+      
+      <tr>
+        <td>[LAB] NodeJS</td>
+        <td>nodejs-lab:22</td>
+        <td>compose</td>
+        <td>posix</td>
+        <td>2026-04-18 16:51:55</td>
+        <td><a href="hosts.html">상세</a></td>
+      </tr>
+      
+      <tr>
+        <td>[LAB] PHP</td>
+        <td>php-lab:22</td>
+        <td>compose</td>
+        <td>posix</td>
+        <td>2026-04-18 16:51:52</td>
+        <td><a href="hosts.html">상세</a></td>
+      </tr>
+      
+      <tr>
+        <td>[LAB] Tomcat</td>
+        <td>tomcat-lab:22</td>
+        <td>compose</td>
+        <td>posix</td>
+        <td>2026-04-18 16:51:49</td>
+        <td><a href="hosts.html">상세</a></td>
+      </tr>
+      
+      <tr>
+        <td>[LAB] Nginx</td>
+        <td>nginx-lab:22</td>
+        <td>compose</td>
+        <td>posix</td>
+        <td>2026-04-18 16:51:47</td>
+        <td><a href="hosts.html">상세</a></td>
+      </tr>
+      
+      <tr>
+        <td>[LAB] Apache</td>
+        <td>apache-lab:22</td>
+        <td>compose</td>
+        <td>posix</td>
+        <td>2026-04-18 16:51:45</td>
+        <td><a href="hosts.html">상세</a></td>
+      </tr>
+      
+      <tr>
+        <td>x</td>
+        <td>y:22</td>
+        <td>compose</td>
+        <td>posix</td>
+        <td>-</td>
+        <td><a href="hosts.html">상세</a></td>
+      </tr>
+      
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <h2>최근 진단 실행</h2>
+  <table>
+    <thead>
+      <tr><th>ID</th><th>호스트</th><th>애플리케이션</th><th>상태</th><th>시작시각</th><th></th></tr>
+    </thead>
+    <tbody>
+      
+      <tr>
+        <td>171</td>
+        <td>[LAB] K8s(Worker)</td>
+        <td>K8s(Worker)</td>
+        <td><span class="badge status-default">completed</span></td>
+        <td>2026-04-18 16:52:16</td>
+        <td><a href="dashboard.html">결과</a></td>
+      </tr>
+      
+      <tr>
+        <td>170</td>
+        <td>[LAB] K8s(Master)</td>
+        <td>K8s(Master)</td>
+        <td><span class="badge status-default">completed</span></td>
+        <td>2026-04-18 16:52:14</td>
+        <td><a href="dashboard.html">결과</a></td>
+      </tr>
+      
+      <tr>
+        <td>169</td>
+        <td>[LAB] Docker</td>
+        <td>Docker</td>
+        <td><span class="badge status-default">completed</span></td>
+        <td>2026-04-18 16:52:11</td>
+        <td><a href="dashboard.html">결과</a></td>
+      </tr>
+      
+      <tr>
+        <td>168</td>
+        <td>[LAB] MS-SQL</td>
+        <td>MS-SQL</td>
+        <td><span class="badge status-default">completed</span></td>
+        <td>2026-04-18 16:52:09</td>
+        <td><a href="dashboard.html">결과</a></td>
+      </tr>
+      
+      <tr>
+        <td>167</td>
+        <td>[LAB] Elasticsearch</td>
+        <td>Elasticsearch</td>
+        <td><span class="badge status-default">completed</span></td>
+        <td>2026-04-18 16:52:06</td>
+        <td><a href="dashboard.html">결과</a></td>
+      </tr>
+      
+      <tr>
+        <td>166</td>
+        <td>[LAB] MongoDB</td>
+        <td>MongoDB</td>
+        <td><span class="badge status-default">completed</span></td>
+        <td>2026-04-18 16:52:02</td>
+        <td><a href="dashboard.html">결과</a></td>
+      </tr>
+      
+      <tr>
+        <td>165</td>
+        <td>[LAB] Redis</td>
+        <td>Redis</td>
+        <td><span class="badge status-default">completed</span></td>
+        <td>2026-04-18 16:52:00</td>
+        <td><a href="dashboard.html">결과</a></td>
+      </tr>
+      
+      <tr>
+        <td>164</td>
+        <td>[LAB] PostgreSQL</td>
+        <td>PostgreSQL</td>
+        <td><span class="badge status-default">completed</span></td>
+        <td>2026-04-18 16:51:59</td>
+        <td><a href="dashboard.html">결과</a></td>
+      </tr>
+      
+      <tr>
+        <td>163</td>
+        <td>[LAB] MY-SQL</td>
+        <td>MY-SQL</td>
+        <td><span class="badge status-default">completed</span></td>
+        <td>2026-04-18 16:51:57</td>
+        <td><a href="dashboard.html">결과</a></td>
+      </tr>
+      
+      <tr>
+        <td>162</td>
+        <td>[LAB] NodeJS</td>
+        <td>NodeJS</td>
+        <td><span class="badge status-default">completed</span></td>
+        <td>2026-04-18 16:51:55</td>
+        <td><a href="dashboard.html">결과</a></td>
+      </tr>
+      
+    </tbody>
+  </table>
+</section>
+
+  </main>
+</body>
+</html>
