@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 *.pdf
 .codex
+.vscode/
 instance/
 cce_check_result_*.json
 test_result.json

@@ -7,6 +7,7 @@ from collections import Counter
 from flask import (
     Blueprint,
     Response,
+    abort,
     current_app,
     flash,
     g,
@@ -35,6 +36,10 @@ from .jobs import launch_assessment, launch_discovery
 
 
 bp = Blueprint("main", __name__)
+
+ALLOWED_TRANSPORTS = {"local", "ssh", "compose"}
+ALLOWED_FINAL_STATUSES = {"양호", "취약", "N/A", "수동점검", "예외"}
+ALLOWED_APPROVAL_DECISIONS = {"approved", "rejected"}
 
 
 def effective_status(row) -> str:
@@ -80,8 +85,8 @@ def status_badge(status: str) -> str:
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        username = request.form["username"].strip()
-        password = request.form["password"]
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
         user = fetch_one("SELECT * FROM users WHERE username = ?", (username,))
         if user and check_password_hash(user["password_hash"], password):
             session.clear()
@@ -125,17 +130,35 @@ def index():
 @login_required
 def hosts():
     if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        address = request.form.get("address", "").strip()
+        transport = request.form.get("transport", "").strip()
+        if not name or not address:
+            flash("호스트 이름과 주소를 입력해야 합니다.", "error")
+            return redirect(url_for("main.hosts"))
+        if transport not in ALLOWED_TRANSPORTS:
+            flash("지원하지 않는 전송방식입니다.", "error")
+            return redirect(url_for("main.hosts"))
+        try:
+            port = int(request.form.get("port") or 22)
+        except ValueError:
+            flash("포트는 숫자로 입력해야 합니다.", "error")
+            return redirect(url_for("main.hosts"))
+        if port < 1 or port > 65535:
+            flash("포트는 1부터 65535 사이여야 합니다.", "error")
+            return redirect(url_for("main.hosts"))
+
         cursor = execute(
             """
             INSERT INTO hosts (name, address, port, remote_user, transport, shell_type, use_sudo, notes, created_by, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                request.form["name"].strip(),
-                request.form["address"].strip(),
-                int(request.form.get("port") or 22),
+                name,
+                address,
+                port,
                 request.form.get("remote_user", "").strip() or None,
-                request.form["transport"],
+                transport,
                 "posix",
                 1 if request.form.get("use_sudo") else 0,
                 request.form.get("notes", "").strip(),
@@ -154,6 +177,9 @@ def hosts():
 @login_required
 def host_detail(host_id: int):
     host = fetch_one("SELECT * FROM hosts WHERE id = ?", (host_id,))
+    if host is None:
+        abort(404)
+
     latest_discovery = fetch_one(
         "SELECT * FROM discovery_runs WHERE host_id = ? ORDER BY id DESC LIMIT 1", (host_id,)
     )
@@ -222,6 +248,9 @@ def host_detail(host_id: int):
 @login_required
 def run_discovery(host_id: int):
     host = fetch_one("SELECT * FROM hosts WHERE id = ?", (host_id,))
+    if host is None:
+        abort(404)
+
     active_run = fetch_one(
         """
         SELECT id FROM discovery_runs
@@ -254,6 +283,9 @@ def run_discovery(host_id: int):
 @login_required
 def start_assessment(host_id: int, app_key: str):
     host = fetch_one("SELECT * FROM hosts WHERE id = ?", (host_id,))
+    if host is None:
+        abort(404)
+
     app = get_app_definition(app_key)
     if app is None:
         flash("알 수 없는 애플리케이션입니다.", "error")
@@ -376,6 +408,9 @@ def run_detail(run_id: int):
         """,
         (run_id,),
     )
+    if run is None:
+        abort(404)
+
     results = _filtered_run_results(run_id)
     counts = Counter(item["effective_status"] for item in results)
     return render_template(
@@ -392,6 +427,9 @@ def run_detail(run_id: int):
 @login_required
 def export_run(run_id: int):
     run = fetch_one("SELECT * FROM assessment_runs WHERE id = ?", (run_id,))
+    if run is None:
+        abort(404)
+
     results = _filtered_run_results(run_id)
     workbook = Workbook()
     sheet = workbook.active
@@ -469,8 +507,11 @@ def controls():
 @bp.route("/results/<int:result_id>/exception", methods=["POST"])
 @login_required
 def request_exception(result_id: int):
-    reason = request.form["reason"].strip()
+    reason = request.form.get("reason", "").strip()
     row = fetch_one("SELECT * FROM assessment_results WHERE id = ?", (result_id,))
+    if row is None:
+        abort(404)
+
     if not reason:
         flash("예외 사유를 입력해야 합니다.", "error")
         return redirect(url_for("main.run_detail", run_id=row["run_id"]))
@@ -489,9 +530,14 @@ def request_exception(result_id: int):
 @bp.route("/results/<int:result_id>/override", methods=["POST"])
 @security_required
 def override_result(result_id: int):
-    final_status = request.form["final_status"].strip() or None
+    final_status = request.form.get("final_status", "").strip() or None
     note = request.form.get("status_note", "").strip() or None
     row = fetch_one("SELECT * FROM assessment_results WHERE id = ?", (result_id,))
+    if row is None:
+        abort(404)
+    if final_status is not None and final_status not in ALLOWED_FINAL_STATUSES:
+        flash("지원하지 않는 최종 판정입니다.", "error")
+        return redirect(url_for("main.run_detail", run_id=row["run_id"]))
 
     if final_status == "예외":
         request_row = fetch_one(
@@ -534,9 +580,18 @@ def approvals():
 @bp.route("/approvals/<int:request_id>/decision", methods=["POST"])
 @security_required
 def approval_decision(request_id: int):
-    decision = request.form["decision"]
+    decision = request.form.get("decision", "").strip()
     comment = request.form.get("approver_comment", "").strip()
     request_row = fetch_one("SELECT * FROM exception_requests WHERE id = ?", (request_id,))
+    if request_row is None:
+        abort(404)
+    if request_row["status"] != "pending":
+        flash("이미 처리된 예외 요청입니다.", "error")
+        return redirect(url_for("main.approvals"))
+    if decision not in ALLOWED_APPROVAL_DECISIONS:
+        flash("지원하지 않는 승인 처리 값입니다.", "error")
+        return redirect(url_for("main.approvals"))
+
     execute(
         """
         UPDATE exception_requests

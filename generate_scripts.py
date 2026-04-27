@@ -4086,6 +4086,12 @@ $ErrorActionPreference = "SilentlyContinue"
 # --- JSON helper ---
 $script:results = @()
 
+function Convert-TraceText {{
+    param([AllowNull()][string]$Text)
+    if ($null -eq $Text) {{ return "" }}
+    return (($Text -replace "`r?`n", ' ') -replace '\\s+', ' ').Trim()
+}}
+
 function Write-ResultTrace {{
     param(
         [string]$Code,
@@ -4096,9 +4102,9 @@ function Write-ResultTrace {{
         [string]$Detail
     )
 
-    $commandText = (($Command ?? '') -replace "`r?`n", ' ').Trim()
-    $stateText = (($CurrentState ?? '') -replace "`r?`n", ' ').Trim()
-    $detailText = (($Detail ?? '') -replace "`r?`n", ' ').Trim()
+    $commandText = Convert-TraceText $Command
+    $stateText = Convert-TraceText $CurrentState
+    $detailText = Convert-TraceText $Detail
     if (-not $commandText) {{ $commandText = '-' }}
     if (-not $stateText) {{ $stateText = '-' }}
     if (-not $detailText) {{ $detailText = '-' }}
@@ -4147,19 +4153,19 @@ function Get-OutputSummary {{
 
 function Get-FirstNumber {{
     param([string]$Text)
-    $match = [regex]::Match(($Text ?? ''), '\\d+')
+    $match = [regex]::Match((Convert-TraceText $Text), '\\d+')
     if ($match.Success) {{ return [int]$match.Value }}
     return $null
 }}
 
 function Test-NegativeMarker {{
     param([string]$Text)
-    return [regex]::IsMatch(($Text ?? ''), '(^|[^A-Za-z0-9_-])(0|false|off|disabled|inactive|none|no|deny|never)([^A-Za-z0-9_-]|$)|계정 사용 안함|사용 안함|비활성', 'IgnoreCase')
+    return [regex]::IsMatch((Convert-TraceText $Text), '(^|[^A-Za-z0-9_-])(0|false|off|disabled|inactive|none|no|deny|never)([^A-Za-z0-9_-]|$)|계정 사용 안함|사용 안함|비활성', 'IgnoreCase')
 }}
 
 function Test-PositiveMarker {{
     param([string]$Text)
-    return [regex]::IsMatch(($Text ?? ''), '(^|[^A-Za-z0-9_-])(1|true|on|enabled|enable|active|yes|allow)([^A-Za-z0-9_-]|$)|활성', 'IgnoreCase')
+    return [regex]::IsMatch((Convert-TraceText $Text), '(^|[^A-Za-z0-9_-])(1|true|on|enabled|enable|active|yes|allow)([^A-Za-z0-9_-]|$)|활성', 'IgnoreCase')
 }}
 
 ''')

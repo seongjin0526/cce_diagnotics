@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import secrets
 from pathlib import Path
 
 from flask import Flask
@@ -12,7 +14,7 @@ from . import auth, db
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_mapping(
-        SECRET_KEY="change-me-for-production",
+        SECRET_KEY=os.environ.get("CCE_DASHBOARD_SECRET_KEY") or secrets.token_hex(32),
         DATABASE=str(REPO_ROOT / "instance" / "dashboard.sqlite3"),
         EXPORT_SHEET_NAME="진단결과",
     )

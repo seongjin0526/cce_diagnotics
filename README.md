@@ -462,6 +462,7 @@ Flask 기반 대시보드 하네스를 추가했습니다. 주요 기능은 아�
 ### 실행
 
 ```bash
+export CCE_DASHBOARD_SECRET_KEY='replace-with-a-long-random-secret'
 python3 run_dashboard.py init-db
 python3 run_dashboard.py create-user security security123! security
 python3 run_dashboard.py create-user operator operator123! user
